@@ -48,6 +48,7 @@ export default function AppPage() {
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
+  const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Keyboard shortcuts
@@ -140,6 +141,7 @@ export default function AppPage() {
     setCurrentMapId(null)
     setActiveSegment(null)
     setStageFilter(null)
+    setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
 
@@ -419,6 +421,17 @@ export default function AppPage() {
                       ))}
                     </div>
 
+                    {/* Company text search */}
+                    <div className="mb-5">
+                      <input
+                        type="text"
+                        value={companySearch}
+                        onChange={e => setCompanySearch(e.target.value)}
+                        placeholder="Filter companies…"
+                        className="w-full max-w-xs bg-terrain-bg border border-terrain-border rounded px-4 py-2 text-terrain-text text-xs font-mono focus:outline-none focus:border-terrain-gold transition-colors placeholder-terrain-muted"
+                      />
+                    </div>
+
                     {/* Stage filter */}
                     {(() => {
                       const stages = Array.from(new Set(
@@ -469,6 +482,7 @@ export default function AppPage() {
                         watchlistIds={watchlistIds}
                         onToggleWatchlist={handleToggleWatchlist}
                         stageFilter={stageFilter}
+                        companySearch={companySearch}
                       />
                     ))}
                   </>
