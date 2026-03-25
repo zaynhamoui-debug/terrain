@@ -166,16 +166,28 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
                 )}
               </div>
               <p className="text-terrain-muted text-sm font-mono mt-1.5 leading-relaxed">{company.tagline}</p>
-              {company.website && (
-                <a
-                  href={`https://${company.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-terrain-gold text-xs font-mono hover:underline mt-1 inline-block"
-                >
-                  {company.website} ↗
-                </a>
-              )}
+              <div className="flex items-center gap-4 mt-1">
+                {company.website && (
+                  <a
+                    href={`https://${company.website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-terrain-gold text-xs font-mono hover:underline inline-block"
+                  >
+                    {company.website} ↗
+                  </a>
+                )}
+                {company.linkedin && (
+                  <a
+                    href={`https://linkedin.com/${company.linkedin}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-terrain-muted text-xs font-mono hover:text-terrain-gold hover:underline inline-block transition-colors"
+                  >
+                    LinkedIn ↗
+                  </a>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0 mt-1">
               {/* Watchlist toggle */}

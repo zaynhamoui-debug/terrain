@@ -18,6 +18,7 @@ export interface Company {
   headcount_range: string
   hq: string
   website: string
+  linkedin: string
   differentiator: string
   key_customers: string[]
   investors: string[]

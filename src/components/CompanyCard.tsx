@@ -84,6 +84,32 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
       <div className="flex items-center gap-3 text-[11px] text-terrain-muted font-mono">
         <span className="truncate">{company.hq}</span>
         {company.founded ? <span className="shrink-0">est. {company.founded}</span> : null}
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {company.website && (
+            <a
+              href={`https://${company.website}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="hover:text-terrain-gold transition-colors"
+              title="Website"
+            >
+              ↗
+            </a>
+          )}
+          {company.linkedin && (
+            <a
+              href={`https://linkedin.com/${company.linkedin}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="hover:text-terrain-gold transition-colors"
+              title="LinkedIn"
+            >
+              in
+            </a>
+          )}
+        </div>
       </div>
     </button>
   )
