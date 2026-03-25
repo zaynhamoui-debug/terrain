@@ -49,6 +49,7 @@ export default function AppPage() {
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
+  const [hqFilter,        setHqFilter]         = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -143,6 +144,7 @@ export default function AppPage() {
     setActiveSegment(null)
     setStageFilter(null)
     setHeadcountFilter(null)
+    setHqFilter(null)
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
@@ -516,6 +518,42 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* HQ filter */}
+                    {(() => {
+                      const locations = Array.from(new Set(
+                        currentMap.segments.flatMap(s => s.companies.map(c => c.hq))
+                      )).filter(Boolean).sort()
+                      if (locations.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">HQ:</span>
+                          <button
+                            onClick={() => setHqFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !hqFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {locations.map(loc => (
+                            <button
+                              key={loc}
+                              onClick={() => setHqFilter(hqFilter === loc ? null : loc)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                                hqFilter === loc
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {loc}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* Segments */}
                     {visibleSegments.map(segment => (
                       <SegmentRow
@@ -526,6 +564,7 @@ export default function AppPage() {
                         onToggleWatchlist={handleToggleWatchlist}
                         stageFilter={stageFilter}
                         headcountFilter={headcountFilter}
+                        hqFilter={hqFilter}
                         companySearch={companySearch}
                       />
                     ))}

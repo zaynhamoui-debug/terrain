@@ -8,14 +8,16 @@ interface Props {
   onToggleWatchlist?: (company: Company) => void
   stageFilter?: string | null
   headcountFilter?: string | null
+  hqFilter?: string | null
   companySearch?: string
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, companySearch }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, companySearch }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
     if (headcountFilter && c.headcount_range !== headcountFilter) return false
+    if (hqFilter && c.hq !== hqFilter) return false
     if (q && !c.name.toLowerCase().includes(q) && !c.tagline?.toLowerCase().includes(q)) return false
     return true
   })
