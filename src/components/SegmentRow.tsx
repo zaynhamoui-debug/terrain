@@ -11,6 +11,7 @@ interface Props {
   hqFilter?: string | null
   momentumFilter?: string | null
   foundedFilter?: string | null
+  investorFilter?: string | null
   companySearch?: string
   onLoadMore?: () => void
   isLoadingMore?: boolean
@@ -25,13 +26,14 @@ const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
   '2023+':       y => y >= 2023,
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
     if (headcountFilter && c.headcount_range !== headcountFilter) return false
     if (hqFilter && c.hq !== hqFilter) return false
     if (momentumFilter && c.momentum_signal !== momentumFilter) return false
+    if (investorFilter && !c.investors?.includes(investorFilter)) return false
     if (foundedFilter && c.founded) {
       const test = FOUNDED_RANGES[foundedFilter]
       if (test && !test(c.founded)) return false

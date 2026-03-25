@@ -55,6 +55,7 @@ export default function AppPage() {
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
   const [momentumFilter,  setMomentumFilter]   = useState<string | null>(null)
   const [foundedFilter,   setFoundedFilter]    = useState<string | null>(null)
+  const [investorFilter,  setInvestorFilter]   = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -152,6 +153,7 @@ export default function AppPage() {
     setHqFilter(null)
     setMomentumFilter(null)
     setFoundedFilter(null)
+    setInvestorFilter(null)
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
@@ -685,6 +687,42 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* Investor filter */}
+                    {(() => {
+                      const investors = Array.from(new Set(
+                        currentMap.segments.flatMap(s => s.companies.flatMap(c => c.investors ?? []))
+                      )).filter(Boolean).sort()
+                      if (investors.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Investor:</span>
+                          <button
+                            onClick={() => setInvestorFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !investorFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {investors.map(inv => (
+                            <button
+                              key={inv}
+                              onClick={() => setInvestorFilter(investorFilter === inv ? null : inv)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${
+                                investorFilter === inv
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {inv}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* Segments */}
                     {visibleSegments.map(segment => (
                       <SegmentRow
@@ -698,6 +736,7 @@ export default function AppPage() {
                         hqFilter={hqFilter}
                         momentumFilter={momentumFilter}
                         foundedFilter={foundedFilter}
+                        investorFilter={investorFilter}
                         companySearch={companySearch}
                         onLoadMore={() => handleLoadMore(segment.id)}
                         isLoadingMore={loadingMoreSegment === segment.id}
