@@ -11,6 +11,7 @@ import CompanyModal from '../components/CompanyModal'
 import CompareView  from '../components/CompareView'
 import HeatmapView  from '../components/HeatmapView'
 import WatchlistPanel, { WatchlistItem } from '../components/WatchlistPanel'
+import MapChat from '../components/MapChat'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { exportCSV, printMap } from '../lib/export'
 
@@ -47,6 +48,7 @@ export default function AppPage() {
   const [watchlistIds,    setWatchlistIds]     = useState<Set<string>>(new Set())
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
+  const [showChat,        setShowChat]         = useState(false)
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
@@ -243,6 +245,19 @@ export default function AppPage() {
             {/* Action buttons — shown when there's a map */}
             {currentMap && (
               <>
+                {/* AI Guide */}
+                <button
+                  onClick={() => setShowChat(c => !c)}
+                  className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-colors ${
+                    showChat
+                      ? 'border-terrain-gold text-terrain-gold'
+                      : 'border-terrain-border text-terrain-muted hover:text-terrain-gold'
+                  }`}
+                >
+                  <span>✦</span>
+                  <span className="hidden sm:inline">AI Guide</span>
+                </button>
+
                 {/* Watchlist */}
                 <button
                   onClick={() => setShowWatchlist(w => !w)}
@@ -675,6 +690,11 @@ export default function AppPage() {
           }}
           onClose={() => setShowWatchlist(false)}
         />
+      )}
+
+      {/* AI Guide chat panel */}
+      {showChat && currentMap && (
+        <MapChat map={currentMap} onClose={() => setShowChat(false)} />
       )}
 
       {/* Hidden ref for search focus */}
