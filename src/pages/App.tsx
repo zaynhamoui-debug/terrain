@@ -48,6 +48,7 @@ export default function AppPage() {
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
+  const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -141,6 +142,7 @@ export default function AppPage() {
     setCurrentMapId(null)
     setActiveSegment(null)
     setStageFilter(null)
+    setHeadcountFilter(null)
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
@@ -473,6 +475,47 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* Headcount filter */}
+                    {(() => {
+                      const HEADCOUNT_ORDER = ['1-10','11-50','51-200','201-500','501-1000','1000+']
+                      const ranges = Array.from(new Set(
+                        currentMap.segments.flatMap(s => s.companies.map(c => c.headcount_range))
+                      )).filter(Boolean)
+                      ranges.sort((a, b) => {
+                        const ai = HEADCOUNT_ORDER.indexOf(a), bi = HEADCOUNT_ORDER.indexOf(b)
+                        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+                      })
+                      if (ranges.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Headcount:</span>
+                          <button
+                            onClick={() => setHeadcountFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !headcountFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {ranges.map(range => (
+                            <button
+                              key={range}
+                              onClick={() => setHeadcountFilter(headcountFilter === range ? null : range)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                                headcountFilter === range
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {range}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* Segments */}
                     {visibleSegments.map(segment => (
                       <SegmentRow
@@ -482,6 +525,7 @@ export default function AppPage() {
                         watchlistIds={watchlistIds}
                         onToggleWatchlist={handleToggleWatchlist}
                         stageFilter={stageFilter}
+                        headcountFilter={headcountFilter}
                         companySearch={companySearch}
                       />
                     ))}

@@ -7,13 +7,15 @@ interface Props {
   watchlistIds?: Set<string>
   onToggleWatchlist?: (company: Company) => void
   stageFilter?: string | null
+  headcountFilter?: string | null
   companySearch?: string
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, companySearch }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, companySearch }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
+    if (headcountFilter && c.headcount_range !== headcountFilter) return false
     if (q && !c.name.toLowerCase().includes(q) && !c.tagline?.toLowerCase().includes(q)) return false
     return true
   })
