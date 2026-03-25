@@ -50,6 +50,7 @@ export default function AppPage() {
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [showChat,        setShowChat]         = useState(false)
   const [loadingMoreSegment, setLoadingMoreSegment] = useState<string | null>(null)
+  const [loadMoreErrors,     setLoadMoreErrors]     = useState<Record<string, string>>({})
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
@@ -211,6 +212,7 @@ export default function AppPage() {
         segment.description,
         segment.companies.map(c => c.name)
       )
+      setLoadMoreErrors(prev => { const n = { ...prev }; delete n[segmentId]; return n })
       setCurrentMap(prev => {
         if (!prev) return prev
         return {
@@ -223,7 +225,8 @@ export default function AppPage() {
         }
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more companies')
+      const msg = err instanceof Error ? err.message : 'Failed to load more companies'
+      setLoadMoreErrors(prev => ({ ...prev, [segmentId]: msg }))
     } finally {
       setLoadingMoreSegment(null)
     }
@@ -740,6 +743,7 @@ export default function AppPage() {
                         companySearch={companySearch}
                         onLoadMore={() => handleLoadMore(segment.id)}
                         isLoadingMore={loadingMoreSegment === segment.id}
+                        loadMoreError={loadMoreErrors[segment.id]}
                       />
                     ))}
                   </>

@@ -15,6 +15,7 @@ interface Props {
   companySearch?: string
   onLoadMore?: () => void
   isLoadingMore?: boolean
+  loadMoreError?: string | null
 }
 
 const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
@@ -26,7 +27,7 @@ const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
   '2023+':       y => y >= 2023,
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, onLoadMore, isLoadingMore, loadMoreError }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
@@ -98,6 +99,9 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
           <span className="text-terrain-muted text-[10px] font-mono">
             {segment.companies.length} loaded
           </span>
+          {loadMoreError && (
+            <span className="text-red-400 text-[10px] font-mono">Error: {loadMoreError}</span>
+          )}
         </div>
       )}
     </div>
