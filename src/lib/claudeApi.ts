@@ -1,8 +1,10 @@
 import { MarketMap, Company } from '../types/marketMap'
 
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-const MODEL      = 'claude-sonnet-4-5'
-const MAX_TOKENS = 16000
+const API_KEY        = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+const MODEL_FULL     = 'claude-sonnet-4-5'
+const MODEL_FAST     = 'claude-haiku-4-5-20251001'
+const MAX_TOKENS     = 16000
+const MAX_TOKENS_FAST = 4000
 
 const SYSTEM_PROMPT = `You are an elite market intelligence analyst. Given a sector or company name, research and return a comprehensive market map as a single valid JSON object with NO markdown, no preamble, no text outside the JSON.
 
@@ -84,7 +86,7 @@ async function callClaude(userContent: string): Promise<string> {
       'content-type':                              'application/json',
     },
     body: JSON.stringify({
-      model:      MODEL,
+      model:      MODEL_FULL,
       max_tokens: MAX_TOKENS,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userContent }],
@@ -104,6 +106,8 @@ async function callClaude(userContent: string): Promise<string> {
   return textBlock.text
 }
 
+const MORE_SYSTEM = `You are a market intelligence analyst. Return ONLY a raw JSON array with no markdown, no code fences, no explanation. Your entire response must begin with [ and end with ].`
+
 export async function fetchMoreCompanies(
   sector: string,
   segmentName: string,
@@ -113,35 +117,25 @@ export async function fetchMoreCompanies(
 ): Promise<Company[]> {
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
 
-  const prompt = `You are a market intelligence analyst. Return a JSON array of ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market.
+  const prompt = `List ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market (${segmentDescription}).
 
-Segment description: ${segmentDescription}
+Exclude these already-listed companies: ${existingNames.join(', ')}
 
-Already listed (DO NOT include these): ${existingNames.join(', ')}
+Return a JSON array of ${batchSize} objects, each with exactly these fields:
+["id","name","tagline","founded","stage","total_funding_usd","funding_display","last_round","valuation_display","headcount_range","hq","website","linkedin","differentiator","key_customers","investors","momentum_signal","is_focal_company"]
 
-Return ONLY a valid JSON array (starting with [ and ending with ]) of company objects. Each object must follow this exact schema:
-{
-  "id": "snake_case unique string",
-  "name": "string",
-  "tagline": "string",
-  "founded": number,
-  "stage": "Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped",
-  "total_funding_usd": number,
-  "funding_display": "string e.g. '$142M'",
-  "last_round": "string",
-  "valuation_display": "string",
-  "headcount_range": "string e.g. '50-200'",
-  "hq": "city, country",
-  "website": "domain only",
-  "linkedin": "company/slug",
-  "differentiator": "1-2 sentences",
-  "key_customers": ["string"],
-  "investors": ["string"],
-  "momentum_signal": "🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth",
-  "is_focal_company": false
-}
+- id: snake_case string
+- founded: number
+- stage: one of Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped
+- total_funding_usd: number
+- headcount_range: e.g. "50-200"
+- website: domain only e.g. "acme.com"
+- linkedin: slug only e.g. "company/acme"
+- momentum_signal: one of 🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth
+- is_focal_company: false
+- key_customers and investors: arrays of strings
 
-Return only real, distinct companies. No duplicates. Your entire response must begin with [ and end with ].`
+Only real companies. No duplicates. Begin with [ and end with ].`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -152,8 +146,9 @@ Return only real, distinct companies. No duplicates. Your entire response must b
       'content-type':                              'application/json',
     },
     body: JSON.stringify({
-      model:      MODEL,
-      max_tokens: MAX_TOKENS,
+      model:      MODEL_FAST,
+      max_tokens: MAX_TOKENS_FAST,
+      system:     MORE_SYSTEM,
       messages:   [{ role: 'user', content: prompt }],
     }),
   })
@@ -172,7 +167,7 @@ Return only real, distinct companies. No duplicates. Your entire response must b
   const raw = textBlock.text
   const start = raw.indexOf('[')
   const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error('Could not parse company array')
+  if (start === -1 || end <= start) throw new Error(`Could not parse company array. Response: ${raw.slice(0, 200)}`)
 
   return JSON.parse(raw.slice(start, end + 1)) as Company[]
 }
