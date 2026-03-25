@@ -54,6 +54,7 @@ export default function AppPage() {
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
   const [momentumFilter,  setMomentumFilter]   = useState<string | null>(null)
+  const [foundedFilter,   setFoundedFilter]    = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -150,6 +151,7 @@ export default function AppPage() {
     setHeadcountFilter(null)
     setHqFilter(null)
     setMomentumFilter(null)
+    setFoundedFilter(null)
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
@@ -566,6 +568,49 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* Founded year filter */}
+                    {(() => {
+                      const RANGES = [
+                        { label: 'Before 2000', test: (y: number) => y < 2000 },
+                        { label: '2000–2009',   test: (y: number) => y >= 2000 && y <= 2009 },
+                        { label: '2010–2014',   test: (y: number) => y >= 2010 && y <= 2014 },
+                        { label: '2015–2019',   test: (y: number) => y >= 2015 && y <= 2019 },
+                        { label: '2020–2022',   test: (y: number) => y >= 2020 && y <= 2022 },
+                        { label: '2023+',       test: (y: number) => y >= 2023 },
+                      ]
+                      const years = currentMap.segments.flatMap(s => s.companies.map(c => c.founded)).filter(Boolean)
+                      const presentRanges = RANGES.filter(r => years.some(y => r.test(y)))
+                      if (presentRanges.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Founded:</span>
+                          <button
+                            onClick={() => setFoundedFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !foundedFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {presentRanges.map(r => (
+                            <button
+                              key={r.label}
+                              onClick={() => setFoundedFilter(foundedFilter === r.label ? null : r.label)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                                foundedFilter === r.label
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* Momentum filter */}
                     {(() => {
                       const MOMENTUM_ORDER = ['🚀 Hypergrowth','📈 Growing','➡️ Stable','⚠️ Challenged','🔒 Stealth']
@@ -652,6 +697,7 @@ export default function AppPage() {
                         headcountFilter={headcountFilter}
                         hqFilter={hqFilter}
                         momentumFilter={momentumFilter}
+                        foundedFilter={foundedFilter}
                         companySearch={companySearch}
                         onLoadMore={() => handleLoadMore(segment.id)}
                         isLoadingMore={loadingMoreSegment === segment.id}

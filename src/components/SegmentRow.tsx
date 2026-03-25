@@ -10,18 +10,32 @@ interface Props {
   headcountFilter?: string | null
   hqFilter?: string | null
   momentumFilter?: string | null
+  foundedFilter?: string | null
   companySearch?: string
   onLoadMore?: () => void
   isLoadingMore?: boolean
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
+const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
+  'Before 2000': y => y < 2000,
+  '2000–2009':   y => y >= 2000 && y <= 2009,
+  '2010–2014':   y => y >= 2010 && y <= 2014,
+  '2015–2019':   y => y >= 2015 && y <= 2019,
+  '2020–2022':   y => y >= 2020 && y <= 2022,
+  '2023+':       y => y >= 2023,
+}
+
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
     if (headcountFilter && c.headcount_range !== headcountFilter) return false
     if (hqFilter && c.hq !== hqFilter) return false
     if (momentumFilter && c.momentum_signal !== momentumFilter) return false
+    if (foundedFilter && c.founded) {
+      const test = FOUNDED_RANGES[foundedFilter]
+      if (test && !test(c.founded)) return false
+    }
     if (q && !c.name.toLowerCase().includes(q) && !c.tagline?.toLowerCase().includes(q)) return false
     return true
   })
