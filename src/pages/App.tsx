@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMarketMap } from '../lib/claudeApi'
+import { generateMarketMap, fetchMoreCompanies } from '../lib/claudeApi'
 import { MarketMap, Company, SavedMap } from '../types/marketMap'
 import SearchBar    from '../components/SearchBar'
 import SegmentRow   from '../components/SegmentRow'
@@ -49,6 +49,7 @@ export default function AppPage() {
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [showChat,        setShowChat]         = useState(false)
+  const [loadingMoreSegment, setLoadingMoreSegment] = useState<string | null>(null)
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
@@ -192,6 +193,36 @@ export default function AppPage() {
   async function handleSignOut() {
     await supabase.auth.signOut()
     navigate('/login')
+  }
+
+  async function handleLoadMore(segmentId: string) {
+    if (!currentMap) return
+    const segment = currentMap.segments.find(s => s.id === segmentId)
+    if (!segment) return
+    setLoadingMoreSegment(segmentId)
+    try {
+      const newCompanies = await fetchMoreCompanies(
+        currentMap.sector,
+        segment.name,
+        segment.description,
+        segment.companies.map(c => c.name)
+      )
+      setCurrentMap(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          segments: prev.segments.map(s =>
+            s.id === segmentId
+              ? { ...s, companies: [...s.companies, ...newCompanies] }
+              : s
+          ),
+        }
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load more companies')
+    } finally {
+      setLoadingMoreSegment(null)
+    }
   }
 
   const visibleSegments = currentMap?.segments.filter(
@@ -622,6 +653,8 @@ export default function AppPage() {
                         hqFilter={hqFilter}
                         momentumFilter={momentumFilter}
                         companySearch={companySearch}
+                        onLoadMore={() => handleLoadMore(segment.id)}
+                        isLoadingMore={loadingMoreSegment === segment.id}
                       />
                     ))}
                   </>

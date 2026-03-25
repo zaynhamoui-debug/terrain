@@ -1,4 +1,4 @@
-import { MarketMap } from '../types/marketMap'
+import { MarketMap, Company } from '../types/marketMap'
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 const MODEL      = 'claude-sonnet-4-5'
@@ -102,6 +102,79 @@ async function callClaude(userContent: string): Promise<string> {
   const textBlock = data.content.find((b): b is TextBlock => b.type === 'text')
   if (!textBlock?.text) throw new Error('No text in API response')
   return textBlock.text
+}
+
+export async function fetchMoreCompanies(
+  sector: string,
+  segmentName: string,
+  segmentDescription: string,
+  existingNames: string[],
+  batchSize = 20
+): Promise<Company[]> {
+  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
+
+  const prompt = `You are a market intelligence analyst. Return a JSON array of ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market.
+
+Segment description: ${segmentDescription}
+
+Already listed (DO NOT include these): ${existingNames.join(', ')}
+
+Return ONLY a valid JSON array (starting with [ and ending with ]) of company objects. Each object must follow this exact schema:
+{
+  "id": "snake_case unique string",
+  "name": "string",
+  "tagline": "string",
+  "founded": number,
+  "stage": "Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped",
+  "total_funding_usd": number,
+  "funding_display": "string e.g. '$142M'",
+  "last_round": "string",
+  "valuation_display": "string",
+  "headcount_range": "string e.g. '50-200'",
+  "hq": "city, country",
+  "website": "domain only",
+  "linkedin": "company/slug",
+  "differentiator": "1-2 sentences",
+  "key_customers": ["string"],
+  "investors": ["string"],
+  "momentum_signal": "🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth",
+  "is_focal_company": false
+}
+
+Return only real, distinct companies. No duplicates. Your entire response must begin with [ and end with ].`
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':                                 API_KEY,
+      'anthropic-version':                         '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type':                              'application/json',
+    },
+    body: JSON.stringify({
+      model:      MODEL,
+      max_tokens: MAX_TOKENS,
+      messages:   [{ role: 'user', content: prompt }],
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(
+      (err as { error?: { message?: string } }).error?.message ?? `API error ${res.status}`
+    )
+  }
+
+  const data: ApiResponse = await res.json()
+  const textBlock = data.content.find((b): b is TextBlock => b.type === 'text')
+  if (!textBlock?.text) throw new Error('No text in API response')
+
+  const raw = textBlock.text
+  const start = raw.indexOf('[')
+  const end   = raw.lastIndexOf(']')
+  if (start === -1 || end <= start) throw new Error('Could not parse company array')
+
+  return JSON.parse(raw.slice(start, end + 1)) as Company[]
 }
 
 export async function generateMarketMap(query: string): Promise<MarketMap> {

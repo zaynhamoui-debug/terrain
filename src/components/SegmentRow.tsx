@@ -11,9 +11,11 @@ interface Props {
   hqFilter?: string | null
   momentumFilter?: string | null
   companySearch?: string
+  onLoadMore?: () => void
+  isLoadingMore?: boolean
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, companySearch }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, companySearch, onLoadMore, isLoadingMore }: Props) {
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
     if (stageFilter && c.stage !== stageFilter) return false
@@ -59,6 +61,29 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
           />
         ))}
       </div>
+
+      {/* Load more */}
+      {onLoadMore && (
+        <div className="mt-5 flex items-center gap-4">
+          <button
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="flex items-center gap-2 px-4 py-2 bg-terrain-surface border border-terrain-border rounded text-xs font-mono text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder transition-colors disabled:opacity-40"
+          >
+            {isLoadingMore ? (
+              <>
+                <span className="w-3 h-3 border border-terrain-muted border-t-terrain-gold rounded-full animate-spin" />
+                Loading…
+              </>
+            ) : (
+              <>+ Load 20 more companies</>
+            )}
+          </button>
+          <span className="text-terrain-muted text-[10px] font-mono">
+            {segment.companies.length} loaded
+          </span>
+        </div>
+      )}
     </div>
   )
 }
