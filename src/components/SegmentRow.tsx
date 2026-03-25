@@ -6,9 +6,16 @@ interface Props {
   onCompanyClick: (company: Company) => void
   watchlistIds?: Set<string>
   onToggleWatchlist?: (company: Company) => void
+  stageFilter?: string | null
 }
 
-export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist }: Props) {
+export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter }: Props) {
+  const companies = stageFilter
+    ? segment.companies.filter(c => c.stage === stageFilter)
+    : segment.companies
+
+  if (companies.length === 0) return null
+
   return (
     <div className="mb-12">
       {/* Segment header */}
@@ -26,13 +33,13 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
           </p>
         </div>
         <span className="ml-auto shrink-0 text-terrain-muted text-xs font-mono border border-terrain-border px-2 py-0.5 rounded">
-          {segment.companies.length}
+          {companies.length}
         </span>
       </div>
 
       {/* Companies grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {segment.companies.map(company => (
+        {companies.map(company => (
           <CompanyCard
             key={company.id}
             company={company}

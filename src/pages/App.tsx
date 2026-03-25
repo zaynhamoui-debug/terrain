@@ -47,6 +47,7 @@ export default function AppPage() {
   const [watchlistIds,    setWatchlistIds]     = useState<Set<string>>(new Set())
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
+  const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Keyboard shortcuts
@@ -138,6 +139,7 @@ export default function AppPage() {
     setCurrentMap(null)
     setCurrentMapId(null)
     setActiveSegment(null)
+    setStageFilter(null)
     setLoadingMsgIdx(0)
     setViewMode('grid')
 
@@ -417,6 +419,47 @@ export default function AppPage() {
                       ))}
                     </div>
 
+                    {/* Stage filter */}
+                    {(() => {
+                      const stages = Array.from(new Set(
+                        currentMap.segments.flatMap(s => s.companies.map(c => c.stage))
+                      )).filter(Boolean)
+                      const STAGE_ORDER = ['Pre-Seed','Seed','Series A','Series B','Series C','Series D+','Public','Bootstrapped','Acquired']
+                      stages.sort((a, b) => {
+                        const ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b)
+                        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+                      })
+                      if (stages.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Stage:</span>
+                          <button
+                            onClick={() => setStageFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !stageFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {stages.map(stage => (
+                            <button
+                              key={stage}
+                              onClick={() => setStageFilter(stageFilter === stage ? null : stage)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                                stageFilter === stage
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {stage}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* Segments */}
                     {visibleSegments.map(segment => (
                       <SegmentRow
@@ -425,6 +468,7 @@ export default function AppPage() {
                         onCompanyClick={setSelectedCompany}
                         watchlistIds={watchlistIds}
                         onToggleWatchlist={handleToggleWatchlist}
+                        stageFilter={stageFilter}
                       />
                     ))}
                   </>
