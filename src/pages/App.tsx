@@ -52,6 +52,7 @@ export default function AppPage() {
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
   const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
   const [hqFilter,        setHqFilter]         = useState<string | null>(null)
+  const [momentumFilter,  setMomentumFilter]   = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -147,6 +148,7 @@ export default function AppPage() {
     setStageFilter(null)
     setHeadcountFilter(null)
     setHqFilter(null)
+    setMomentumFilter(null)
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
@@ -533,6 +535,44 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* Momentum filter */}
+                    {(() => {
+                      const MOMENTUM_ORDER = ['🚀 Hypergrowth','📈 Growing','➡️ Stable','⚠️ Challenged','🔒 Stealth']
+                      const signals = Array.from(new Set(
+                        currentMap.segments.flatMap(s => s.companies.map(c => c.momentum_signal))
+                      )).filter(Boolean)
+                      signals.sort((a, b) => MOMENTUM_ORDER.indexOf(a) - MOMENTUM_ORDER.indexOf(b))
+                      if (signals.length === 0) return null
+                      return (
+                        <div className="flex gap-2 mb-8 flex-wrap items-center">
+                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Momentum:</span>
+                          <button
+                            onClick={() => setMomentumFilter(null)}
+                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
+                              !momentumFilter
+                                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                            }`}
+                          >
+                            All
+                          </button>
+                          {signals.map(signal => (
+                            <button
+                              key={signal}
+                              onClick={() => setMomentumFilter(momentumFilter === signal ? null : signal)}
+                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${
+                                momentumFilter === signal
+                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
+                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              }`}
+                            >
+                              {signal}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
                     {/* HQ filter */}
                     {(() => {
                       const locations = Array.from(new Set(
@@ -580,6 +620,7 @@ export default function AppPage() {
                         stageFilter={stageFilter}
                         headcountFilter={headcountFilter}
                         hqFilter={hqFilter}
+                        momentumFilter={momentumFilter}
                         companySearch={companySearch}
                       />
                     ))}
