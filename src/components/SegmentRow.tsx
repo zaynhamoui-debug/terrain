@@ -53,7 +53,10 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
   return (
     <div className="mb-12">
       {/* Segment header */}
-      <div className="flex items-center gap-4 mb-5 pb-3 border-b border-terrain-border">
+      <div
+        className="flex items-center gap-4 mb-5 pb-3 border-b border-terrain-border pl-3"
+        style={{ borderLeftColor: segment.color, borderLeftWidth: 3 }}
+      >
         <button
           onClick={() => setIsCollapsed(c => !c)}
           className="flex items-center gap-4 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
@@ -67,7 +70,7 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
             style={{ backgroundColor: segment.color }}
           />
           <div className="min-w-0">
-            <h3 className="font-display text-lg font-semibold text-terrain-text">
+            <h3 className="font-display text-xl font-bold text-terrain-text">
               {segment.name}
             </h3>
             <p className="text-terrain-muted text-xs font-mono mt-0.5 truncate">
@@ -75,7 +78,14 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
             </p>
           </div>
         </button>
-        <span className="ml-auto shrink-0 text-terrain-muted text-xs font-mono border border-terrain-border px-2 py-0.5 rounded">
+        <span
+          className="ml-auto shrink-0 text-xs font-mono px-2.5 py-0.5 rounded-full border"
+          style={{
+            color: segment.color,
+            borderColor: segment.color + '50',
+            backgroundColor: segment.color + '18',
+          }}
+        >
           {companies.length}
         </span>
       </div>

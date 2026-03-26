@@ -315,13 +315,19 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
         <div className="px-7 py-6 space-y-7">
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-            <StatBlock label="Stage"      value={company.stage} />
-            <StatBlock label="Funding"    value={company.funding_display}   gold />
-            <StatBlock label="Valuation"  value={company.valuation_display} gold />
-            <StatBlock label="Founded"    value={company.founded?.toString()} />
-            <StatBlock label="Headcount"  value={company.headcount_range} />
-            <StatBlock label="HQ"         value={company.hq} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 divide-x divide-terrain-border border border-terrain-border rounded-lg overflow-hidden">
+            {[
+              { label: 'Stage',     value: company.stage,                    gold: false },
+              { label: 'Funding',   value: company.funding_display,          gold: true },
+              { label: 'Valuation', value: company.valuation_display,        gold: true },
+              { label: 'Founded',   value: company.founded?.toString(),      gold: false },
+              { label: 'Headcount', value: company.headcount_range,          gold: false },
+              { label: 'HQ',        value: company.hq,                       gold: false },
+            ].map((stat, i) => (
+              <div key={stat.label} className={`px-4 py-3 bg-terrain-bg ${i >= 3 ? 'border-t border-terrain-border' : ''}`}>
+                <StatBlock label={stat.label} value={stat.value} gold={stat.gold} />
+              </div>
+            ))}
           </div>
 
           {/* Funding stage ladder */}
@@ -346,8 +352,9 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
           {/* Investors */}
           {company.investors?.length > 0 && (
             <div>
-              <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
-                Investors
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono shrink-0">Investors</span>
+                <div className="flex-1 h-px bg-terrain-border" />
               </div>
               <div className="flex flex-wrap gap-2">
                 {company.investors.map(inv => <Pill key={inv} label={inv} />)}
@@ -358,8 +365,9 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
           {/* Key customers */}
           {company.key_customers?.length > 0 && (
             <div>
-              <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
-                Key Customers
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono shrink-0">Key Customers</span>
+                <div className="flex-1 h-px bg-terrain-border" />
               </div>
               <div className="flex flex-wrap gap-2">
                 {company.key_customers.map(c => <Pill key={c} label={c} gold />)}
@@ -369,8 +377,9 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
 
           {/* Deal Flow */}
           <div>
-            <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
-              Deal Flow
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono shrink-0">Deal Flow</span>
+              <div className="flex-1 h-px bg-terrain-border" />
             </div>
             <div className="flex items-center gap-3">
               <select
@@ -389,14 +398,15 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
 
           {/* AI Actions: Generate Memo + Red Flags */}
           <div>
-            <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
-              AI Analysis
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono shrink-0">AI Analysis</span>
+              <div className="flex-1 h-px bg-terrain-border" />
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={handleGenerateMemo}
                 disabled={memoLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-terrain-goldDim border border-terrain-goldBorder text-terrain-gold text-xs font-mono rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-terrain-goldDim border border-terrain-goldBorder text-terrain-gold text-xs font-mono rounded-lg hover:opacity-80 transition-opacity disabled:opacity-40"
               >
                 {memoLoading ? (
                   <>
@@ -410,7 +420,7 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
               <button
                 onClick={handleDetectRedFlags}
                 disabled={redFlagsLoading}
-                className="flex items-center gap-1.5 px-4 py-2 bg-red-950/40 border border-red-800/60 text-red-400 text-xs font-mono rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-950/40 border border-red-800/60 text-red-400 text-xs font-mono rounded-lg hover:opacity-80 transition-opacity disabled:opacity-40"
               >
                 {redFlagsLoading ? (
                   <>
@@ -462,10 +472,9 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
 
           {/* Notes */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">
-                Your Notes
-              </div>
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono shrink-0">Your Notes</span>
+              <div className="flex-1 h-px bg-terrain-border" />
               {isSaving && <span className="text-terrain-muted text-[10px] font-mono">saving…</span>}
               {saved    && <span className="text-terrain-gold  text-[10px] font-mono">saved ✓</span>}
               {!mapId   && <span className="text-terrain-muted text-[10px] font-mono">(map not yet saved)</span>}

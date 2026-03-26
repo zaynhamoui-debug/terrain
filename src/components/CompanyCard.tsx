@@ -38,9 +38,9 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
   return (
     <button
       onClick={() => onSelect(company)}
-      className={`group relative text-left w-full p-5 rounded-lg border transition-all duration-150 hover:translate-y-[-1px] ${
+      className={`group relative text-left w-full p-4 rounded-lg border transition-all duration-200 hover:shadow-lg ${
         company.is_focal_company
-          ? 'border-terrain-gold bg-terrain-goldDim hover:border-terrain-gold/70'
+          ? 'border-terrain-gold bg-terrain-goldDim hover:border-terrain-gold/70 border-l-2'
           : 'border-terrain-border bg-terrain-surface hover:border-terrain-subtle'
       }`}
     >
@@ -135,13 +135,13 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
 
       {/* Ask AI button */}
       {onAskAI && (
-        <div className="mt-3 pt-3 border-t border-terrain-border">
+        <div className="mt-2 pt-2 border-t border-terrain-border opacity-0 group-hover:opacity-100 transition-all duration-200">
           <span
             role="button"
             tabIndex={0}
             onClick={e => { e.stopPropagation(); onAskAI(company) }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onAskAI(company) } }}
-            className="text-[10px] font-mono text-terrain-gold border border-terrain-goldBorder bg-terrain-goldDim px-2 py-1 rounded hover:opacity-80 transition-opacity cursor-pointer"
+            className="text-[9px] font-mono text-terrain-muted border border-terrain-border px-2 py-0.5 rounded hover:text-terrain-gold hover:border-terrain-goldBorder transition-colors cursor-pointer"
           >
             Ask AI ✦
           </span>

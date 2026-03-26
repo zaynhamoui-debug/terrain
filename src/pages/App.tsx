@@ -61,6 +61,7 @@ export default function AppPage() {
   const [foundedFilter,   setFoundedFilter]    = useState<string | null>(null)
   const [investorFilter,  setInvestorFilter]   = useState<string | null>(null)
   const [companySearch,   setCompanySearch]    = useState('')
+  const [showFilters,     setShowFilters]      = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Deal flow
@@ -180,6 +181,7 @@ export default function AppPage() {
     setFoundedFilter(null)
     setInvestorFilter(null)
     setCompanySearch('')
+    setShowFilters(false)
     setLoadingMsgIdx(0)
     setViewMode('grid')
     setChatInitialQ(undefined)
@@ -313,11 +315,11 @@ export default function AppPage() {
       />
 
       {/* Header */}
-      <header className="relative border-b border-terrain-border bg-terrain-bg/80 backdrop-blur sticky top-0 z-20">
+      <header className="relative border-b border-terrain-border bg-terrain-bg/90 backdrop-blur sticky top-0 z-20" style={{ boxShadow: '0 1px 20px rgba(201,168,76,0.06), 0 1px 0 rgba(201,168,76,0.08)' }}>
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-baseline gap-4 shrink-0">
-            <h1 className="font-display text-xl font-bold text-terrain-text tracking-[0.2em]">
-              TERRAIN
+            <h1 className="font-display text-xl font-bold text-terrain-text tracking-[0.3em] uppercase">
+              Terrain
             </h1>
             <span className="text-terrain-muted text-[10px] uppercase tracking-widest hidden sm:block">
               Market Intelligence
@@ -343,11 +345,11 @@ export default function AppPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Pipeline — always visible */}
             <button
               onClick={() => setViewMode(v => v === 'pipeline' ? 'grid' : 'pipeline')}
-              className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-colors ${
+              className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-all duration-200 ${
                 viewMode === 'pipeline'
                   ? 'border-terrain-gold text-terrain-gold'
                   : 'border-terrain-border text-terrain-muted hover:text-terrain-gold'
@@ -357,16 +359,16 @@ export default function AppPage() {
               <span className="hidden sm:inline">Pipeline</span>
             </button>
 
-            {/* Action buttons — shown when there's a map */}
+            {/* Action buttons group — shown when there's a map */}
             {currentMap && (
-              <>
+              <div className="flex items-center border border-terrain-border rounded-lg overflow-hidden divide-x divide-terrain-border">
                 {/* AI Guide */}
                 <button
                   onClick={() => { setChatInitialQ(undefined); setShowChat(c => !c) }}
-                  className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-colors ${
+                  className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 transition-all duration-200 ${
                     showChat
-                      ? 'border-terrain-gold text-terrain-gold'
-                      : 'border-terrain-border text-terrain-muted hover:text-terrain-gold'
+                      ? 'bg-terrain-goldDim text-terrain-gold'
+                      : 'text-terrain-muted hover:text-terrain-gold hover:bg-terrain-surface'
                   }`}
                 >
                   <span>✦</span>
@@ -376,7 +378,7 @@ export default function AppPage() {
                 {/* Watchlist */}
                 <button
                   onClick={() => setShowWatchlist(w => !w)}
-                  className="flex items-center gap-1.5 text-terrain-muted hover:text-terrain-gold text-xs font-mono border border-terrain-border px-3 py-1.5 rounded transition-colors"
+                  className="flex items-center gap-1.5 text-terrain-muted hover:text-terrain-gold text-xs font-mono px-3 py-1.5 transition-all duration-200 hover:bg-terrain-surface"
                 >
                   <span>♥</span>
                   <span className="hidden sm:inline">Watchlist</span>
@@ -389,7 +391,7 @@ export default function AppPage() {
                 <button
                   onClick={handleShare}
                   disabled={!currentMapId || shareStatus !== 'idle'}
-                  className="text-terrain-muted hover:text-terrain-gold text-xs font-mono border border-terrain-border px-3 py-1.5 rounded transition-colors disabled:opacity-40"
+                  className="text-terrain-muted hover:text-terrain-gold text-xs font-mono px-3 py-1.5 transition-all duration-200 hover:bg-terrain-surface disabled:opacity-40"
                 >
                   {shareStatus === 'sharing' ? '···' : shareStatus === 'copied' ? '✓ Copied!' : '↗ Share'}
                 </button>
@@ -398,13 +400,13 @@ export default function AppPage() {
                 <div className="relative">
                   <button
                     onClick={e => { e.stopPropagation(); setShowExportMenu(m => !m) }}
-                    className="text-terrain-muted hover:text-terrain-gold text-xs font-mono border border-terrain-border px-3 py-1.5 rounded transition-colors"
+                    className="text-terrain-muted hover:text-terrain-gold text-xs font-mono px-3 py-1.5 transition-all duration-200 hover:bg-terrain-surface"
                   >
                     ↓ Export ▾
                   </button>
                   {showExportMenu && (
                     <div
-                      className="absolute right-0 top-full mt-1 bg-terrain-surface border border-terrain-border rounded shadow-xl z-30 min-w-[160px]"
+                      className="absolute right-0 top-full mt-1 bg-terrain-surface border border-terrain-border rounded-lg shadow-xl z-30 min-w-[160px]"
                       onClick={e => e.stopPropagation()}
                     >
                       <button
@@ -422,17 +424,17 @@ export default function AppPage() {
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
 
             {userEmail && (
-              <span className="text-terrain-muted text-xs hidden md:block truncate max-w-[160px]">
+              <span className="text-terrain-muted text-xs hidden md:block truncate max-w-[160px] ml-1">
                 {userEmail}
               </span>
             )}
             <button
               onClick={handleSignOut}
-              className="text-terrain-muted text-xs hover:text-terrain-text transition-colors tracking-wider"
+              className="text-terrain-muted text-xs hover:text-terrain-text transition-colors tracking-wider ml-1"
             >
               Sign out
             </button>
@@ -461,17 +463,22 @@ export default function AppPage() {
         {viewMode !== 'compare' && viewMode !== 'pipeline' && (
           <>
             {/* Hero search area */}
-            <div className={`${currentMap ? 'py-10' : 'py-20'} transition-all`}>
+            <div className={`${currentMap ? 'py-10' : 'py-24'} transition-all duration-300 relative`}>
               {!currentMap && !isLoading && (
-                <div className="text-center mb-12">
-                  <h2 className="font-display text-5xl font-bold text-terrain-text mb-3">
-                    Map the market.
-                  </h2>
-                  <p className="text-terrain-muted text-sm max-w-md mx-auto leading-relaxed">
-                    Enter a sector or company. TERRAIN returns a live competitive landscape —
-                    segments, funding, white spaces, and momentum.
-                  </p>
-                </div>
+                <>
+                  {/* Decorative background hexagon */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+                    <span className="text-[28rem] text-terrain-gold opacity-[0.025] leading-none">⬡</span>
+                  </div>
+                  <div className="text-center mb-12 relative">
+                    <h2 className="font-display text-7xl font-bold text-terrain-text mb-4 tracking-tight" style={{ borderBottom: '1px solid rgba(201,168,76,0.2)', display: 'inline-block', paddingBottom: '0.5rem' }}>
+                      TERRAIN
+                    </h2>
+                    <p className="text-terrain-gold text-sm font-mono mt-4 tracking-widest uppercase">
+                      Institutional-grade market intelligence. Powered by AI.
+                    </p>
+                  </div>
+                </>
               )}
               <SearchBar onSearch={handleSearch} isLoading={isLoading} />
             </div>
@@ -571,102 +578,19 @@ export default function AppPage() {
                       ))}
                     </div>
 
-                    {/* Company text search */}
-                    <div className="mb-5">
-                      <input
-                        type="text"
-                        value={companySearch}
-                        onChange={e => setCompanySearch(e.target.value)}
-                        placeholder="Filter companies…"
-                        className="w-full max-w-xs bg-terrain-bg border border-terrain-border rounded px-4 py-2 text-terrain-text text-xs font-mono focus:outline-none focus:border-terrain-gold transition-colors placeholder-terrain-muted"
-                      />
-                    </div>
-
-                    {/* Stage filter */}
+                    {/* Compact filter bar */}
                     {(() => {
-                      const stages = Array.from(new Set(
-                        currentMap.segments.flatMap(s => s.companies.map(c => c.stage))
-                      )).filter(Boolean)
+                      const activeFilterCount = [stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch].filter(Boolean).length
+
+                      const stages = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.map(c => c.stage)))).filter(Boolean)
                       const STAGE_ORDER = ['Pre-Seed','Seed','Series A','Series B','Series C','Series D+','Public','Bootstrapped','Acquired']
-                      stages.sort((a, b) => {
-                        const ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b)
-                        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-                      })
-                      if (stages.length === 0) return null
-                      return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Stage:</span>
-                          <button
-                            onClick={() => setStageFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !stageFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {stages.map(stage => (
-                            <button
-                              key={stage}
-                              onClick={() => setStageFilter(stageFilter === stage ? null : stage)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                                stageFilter === stage
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                              }`}
-                            >
-                              {stage}
-                            </button>
-                          ))}
-                        </div>
-                      )
-                    })()}
+                      stages.sort((a, b) => { const ai = STAGE_ORDER.indexOf(a), bi = STAGE_ORDER.indexOf(b); return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) })
 
-                    {/* Headcount filter */}
-                    {(() => {
                       const HEADCOUNT_ORDER = ['1-10','11-50','51-200','201-500','501-1000','1000+']
-                      const ranges = Array.from(new Set(
-                        currentMap.segments.flatMap(s => s.companies.map(c => c.headcount_range))
-                      )).filter(Boolean)
-                      ranges.sort((a, b) => {
-                        const ai = HEADCOUNT_ORDER.indexOf(a), bi = HEADCOUNT_ORDER.indexOf(b)
-                        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-                      })
-                      if (ranges.length === 0) return null
-                      return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Headcount:</span>
-                          <button
-                            onClick={() => setHeadcountFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !headcountFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {ranges.map(range => (
-                            <button
-                              key={range}
-                              onClick={() => setHeadcountFilter(headcountFilter === range ? null : range)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                                headcountFilter === range
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                              }`}
-                            >
-                              {range}
-                            </button>
-                          ))}
-                        </div>
-                      )
-                    })()}
+                      const ranges = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.map(c => c.headcount_range)))).filter(Boolean)
+                      ranges.sort((a, b) => { const ai = HEADCOUNT_ORDER.indexOf(a), bi = HEADCOUNT_ORDER.indexOf(b); return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) })
 
-                    {/* Founded year filter */}
-                    {(() => {
-                      const RANGES = [
+                      const RANGES_DEF = [
                         { label: 'Before 2000', test: (y: number) => y < 2000 },
                         { label: '2000–2009',   test: (y: number) => y >= 2000 && y <= 2009 },
                         { label: '2010–2014',   test: (y: number) => y >= 2010 && y <= 2014 },
@@ -675,144 +599,115 @@ export default function AppPage() {
                         { label: '2023+',       test: (y: number) => y >= 2023 },
                       ]
                       const years = currentMap.segments.flatMap(s => s.companies.map(c => c.founded)).filter(Boolean)
-                      const presentRanges = RANGES.filter(r => years.some(y => r.test(y)))
-                      if (presentRanges.length === 0) return null
-                      return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Founded:</span>
-                          <button
-                            onClick={() => setFoundedFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !foundedFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {presentRanges.map(r => (
-                            <button
-                              key={r.label}
-                              onClick={() => setFoundedFilter(foundedFilter === r.label ? null : r.label)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                                foundedFilter === r.label
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                              }`}
-                            >
-                              {r.label}
-                            </button>
-                          ))}
-                        </div>
-                      )
-                    })()}
+                      const presentRanges = RANGES_DEF.filter(r => years.some(y => r.test(y)))
 
-                    {/* Momentum filter */}
-                    {(() => {
                       const MOMENTUM_ORDER = ['🚀 Hypergrowth','📈 Growing','➡️ Stable','⚠️ Challenged','🔒 Stealth']
-                      const signals = Array.from(new Set(
-                        currentMap.segments.flatMap(s => s.companies.map(c => c.momentum_signal))
-                      )).filter(Boolean)
+                      const signals = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.map(c => c.momentum_signal)))).filter(Boolean)
                       signals.sort((a, b) => MOMENTUM_ORDER.indexOf(a) - MOMENTUM_ORDER.indexOf(b))
-                      if (signals.length === 0) return null
-                      return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Momentum:</span>
-                          <button
-                            onClick={() => setMomentumFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !momentumFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {signals.map(signal => (
-                            <button
-                              key={signal}
-                              onClick={() => setMomentumFilter(momentumFilter === signal ? null : signal)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${
-                                momentumFilter === signal
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                              }`}
-                            >
-                              {signal}
-                            </button>
-                          ))}
-                        </div>
-                      )
-                    })()}
 
-                    {/* HQ filter */}
-                    {(() => {
-                      const locations = Array.from(new Set(
-                        currentMap.segments.flatMap(s => s.companies.map(c => c.hq))
-                      )).filter(Boolean).sort()
-                      if (locations.length === 0) return null
-                      return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">HQ:</span>
-                          <button
-                            onClick={() => setHqFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !hqFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {locations.map(loc => (
-                            <button
-                              key={loc}
-                              onClick={() => setHqFilter(hqFilter === loc ? null : loc)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                                hqFilter === loc
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                              }`}
-                            >
-                              {loc}
-                            </button>
-                          ))}
-                        </div>
-                      )
-                    })()}
+                      const locations = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.map(c => c.hq)))).filter(Boolean).sort()
+                      const investors = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.flatMap(c => c.investors ?? [])))).filter(Boolean).sort()
 
-                    {/* Investor filter */}
-                    {(() => {
-                      const investors = Array.from(new Set(
-                        currentMap.segments.flatMap(s => s.companies.flatMap(c => c.investors ?? []))
-                      )).filter(Boolean).sort()
-                      if (investors.length === 0) return null
                       return (
-                        <div className="flex gap-2 mb-8 flex-wrap items-center">
-                          <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">Investor:</span>
-                          <button
-                            onClick={() => setInvestorFilter(null)}
-                            className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${
-                              !investorFilter
-                                ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
-                            }`}
-                          >
-                            All
-                          </button>
-                          {investors.map(inv => (
+                        <div className="mb-8">
+                          {/* Single-row filter bar */}
+                          <div className="flex items-center gap-3 mb-3">
+                            <input
+                              type="text"
+                              value={companySearch}
+                              onChange={e => setCompanySearch(e.target.value)}
+                              placeholder="Filter companies…"
+                              className="flex-1 max-w-xs bg-terrain-bg border border-terrain-border rounded px-4 py-2 text-terrain-text text-xs font-mono focus:outline-none focus:border-terrain-gold transition-all duration-200 placeholder-terrain-muted"
+                            />
                             <button
-                              key={inv}
-                              onClick={() => setInvestorFilter(investorFilter === inv ? null : inv)}
-                              className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${
-                                investorFilter === inv
-                                  ? 'bg-terrain-gold text-terrain-bg font-bold'
-                                  : 'bg-terrain-surface text-terrain-muted hover:text-terrain-text border border-terrain-border'
+                              onClick={() => setShowFilters(f => !f)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded border text-xs font-mono transition-all duration-200 ${
+                                showFilters || activeFilterCount > 0
+                                  ? 'border-terrain-goldBorder bg-terrain-goldDim text-terrain-gold'
+                                  : 'border-terrain-border text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder'
                               }`}
                             >
-                              {inv}
+                              <span>≡</span>
+                              <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
                             </button>
-                          ))}
+                            {activeFilterCount > 0 && (
+                              <button
+                                onClick={() => {
+                                  setStageFilter(null); setHeadcountFilter(null); setHqFilter(null)
+                                  setMomentumFilter(null); setFoundedFilter(null); setInvestorFilter(null); setCompanySearch('')
+                                }}
+                                className="text-terrain-muted text-xs font-mono hover:text-terrain-gold transition-colors underline underline-offset-2"
+                              >
+                                Clear all
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Collapsible filter panel */}
+                          {showFilters && (
+                            <div className="bg-terrain-surface border border-terrain-border rounded-lg p-4 space-y-4">
+                              {/* Stage */}
+                              {stages.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Stage</span>
+                                  <button onClick={() => setStageFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!stageFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {stages.map(stage => (
+                                    <button key={stage} onClick={() => setStageFilter(stageFilter === stage ? null : stage)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter === stage ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{stage}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Headcount */}
+                              {ranges.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Size</span>
+                                  <button onClick={() => setHeadcountFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!headcountFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {ranges.map(range => (
+                                    <button key={range} onClick={() => setHeadcountFilter(headcountFilter === range ? null : range)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${headcountFilter === range ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{range}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Founded */}
+                              {presentRanges.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Founded</span>
+                                  <button onClick={() => setFoundedFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!foundedFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {presentRanges.map(r => (
+                                    <button key={r.label} onClick={() => setFoundedFilter(foundedFilter === r.label ? null : r.label)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${foundedFilter === r.label ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{r.label}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Momentum */}
+                              {signals.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Signal</span>
+                                  <button onClick={() => setMomentumFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!momentumFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {signals.map(signal => (
+                                    <button key={signal} onClick={() => setMomentumFilter(momentumFilter === signal ? null : signal)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${momentumFilter === signal ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{signal}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* HQ */}
+                              {locations.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">HQ</span>
+                                  <button onClick={() => setHqFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!hqFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {locations.map(loc => (
+                                    <button key={loc} onClick={() => setHqFilter(hqFilter === loc ? null : loc)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${hqFilter === loc ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{loc}</button>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Investor */}
+                              {investors.length > 0 && (
+                                <div className="flex gap-2 flex-wrap items-center">
+                                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Investor</span>
+                                  <button onClick={() => setInvestorFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!investorFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  {investors.map(inv => (
+                                    <button key={inv} onClick={() => setInvestorFilter(investorFilter === inv ? null : inv)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${investorFilter === inv ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{inv}</button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })()}
@@ -901,35 +796,44 @@ export default function AppPage() {
                   {savedMaps.map(map => (
                     <div
                       key={map.id}
-                      className="relative group px-5 py-4 bg-terrain-surface border border-terrain-border rounded-lg hover:border-terrain-subtle transition-colors"
+                      className="relative group px-5 py-4 bg-terrain-surface border border-terrain-border rounded-lg hover:border-terrain-goldBorder transition-all duration-200"
+                      style={{ borderLeft: '2px solid rgba(201,168,76,0.15)' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderLeft = '2px solid rgba(201,168,76,0.7)' }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderLeft = '2px solid rgba(201,168,76,0.15)' }}
                     >
                       {/* Main clickable area */}
                       <button
                         onClick={() => loadSavedMap(map.id)}
-                        className="w-full text-left"
+                        className="w-full text-left flex items-start gap-3"
                       >
-                        {renamingId === map.id ? (
-                          <input
-                            autoFocus
-                            value={renameValue}
-                            onChange={e => setRenameValue(e.target.value)}
-                            onBlur={() => commitRename(map.id)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') { e.preventDefault(); commitRename(map.id) }
-                              if (e.key === 'Escape') { setRenamingId(null) }
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            className="w-full bg-terrain-bg border border-terrain-gold rounded px-2 py-0.5 text-terrain-text text-sm font-mono focus:outline-none"
-                          />
-                        ) : (
-                          <div className="text-terrain-text text-sm font-mono group-hover:text-terrain-gold transition-colors truncate pr-14">
-                            {map.query}
+                        {/* Sector initial badge */}
+                        <div className="shrink-0 w-8 h-8 rounded bg-terrain-goldDim border border-terrain-goldBorder flex items-center justify-center text-terrain-gold text-sm font-display font-bold">
+                          {map.query.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {renamingId === map.id ? (
+                            <input
+                              autoFocus
+                              value={renameValue}
+                              onChange={e => setRenameValue(e.target.value)}
+                              onBlur={() => commitRename(map.id)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') { e.preventDefault(); commitRename(map.id) }
+                                if (e.key === 'Escape') { setRenamingId(null) }
+                              }}
+                              onClick={e => e.stopPropagation()}
+                              className="w-full bg-terrain-bg border border-terrain-gold rounded px-2 py-0.5 text-terrain-text text-sm font-mono focus:outline-none"
+                            />
+                          ) : (
+                            <div className="text-terrain-text text-sm font-mono group-hover:text-terrain-gold transition-colors truncate pr-10">
+                              {map.query}
+                            </div>
+                          )}
+                          <div className="text-terrain-muted text-[10px] font-mono mt-1 opacity-60">
+                            {new Date(map.created_at).toLocaleDateString('en-US', {
+                              month: 'short', day: 'numeric', year: 'numeric',
+                            })}
                           </div>
-                        )}
-                        <div className="text-terrain-muted text-xs font-mono mt-1.5">
-                          {new Date(map.created_at).toLocaleDateString('en-US', {
-                            month: 'short', day: 'numeric', year: 'numeric',
-                          })}
                         </div>
                       </button>
 
