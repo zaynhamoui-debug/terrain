@@ -1,8 +1,9 @@
 import { MarketMap, Company } from '../types/marketMap'
 
 const API_KEY         = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+const MODEL_FAST      = 'claude-haiku-4-5-20251001'
 const MODEL_FULL      = 'claude-sonnet-4-5'
-const MAX_TOKENS      = 16000
+const MAX_TOKENS      = 10000
 const MAX_TOKENS_MORE = 8000
 
 const SYSTEM_PROMPT = `You are an elite market intelligence analyst. Given a sector or company name, research and return a comprehensive market map as a single valid JSON object with NO markdown, no preamble, no text outside the JSON.
@@ -85,7 +86,7 @@ async function callClaude(userContent: string): Promise<string> {
       'content-type':                              'application/json',
     },
     body: JSON.stringify({
-      model:      MODEL_FULL,
+      model:      MODEL_FAST,
       max_tokens: MAX_TOKENS,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userContent }],
