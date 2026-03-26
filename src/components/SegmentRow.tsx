@@ -35,7 +35,9 @@ export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onTo
 
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
-    if (stageFilter && c.stage !== stageFilter) return false
+    if (stageFilter === 'Early Stage') {
+      if (!['Pre-Seed', 'Seed', 'Series A'].includes(c.stage ?? '')) return false
+    } else if (stageFilter && c.stage !== stageFilter) return false
     if (headcountFilter && c.headcount_range !== headcountFilter) return false
     if (hqFilter && c.hq !== hqFilter) return false
     if (momentumFilter && c.momentum_signal !== momentumFilter) return false

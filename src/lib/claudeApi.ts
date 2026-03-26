@@ -6,12 +6,12 @@ const MODEL_FULL      = 'claude-sonnet-4-5'
 const MAX_TOKENS      = 16000
 const MAX_TOKENS_MORE = 8000
 
-const SYSTEM_PROMPT = `You are an elite market intelligence analyst. Given a sector or company name, research and return a comprehensive market map as a single valid JSON object with NO markdown, no preamble, no text outside the JSON.
+const SYSTEM_PROMPT = `You are an elite early-stage venture capital analyst. Given a sector or company name, research and return a comprehensive market map focused on Pre-Seed, Seed, and Series A investment opportunities, as a single valid JSON object with NO markdown, no preamble, no text outside the JSON.
 
 Schema:
 {
   "sector": "string",
-  "summary": "2-3 sentence landscape overview",
+  "summary": "2-3 sentence landscape overview emphasizing early-stage opportunity",
   "last_updated": "ISO date",
   "total_market_size": "string e.g. '$4.2B TAM (2024)'",
   "segments": [
@@ -44,7 +44,7 @@ Schema:
       ]
     }
   ],
-  "white_spaces": ["string — each a 1-sentence gap or unmet opportunity"],
+  "white_spaces": ["string — each a 1-sentence early-stage investment opportunity or gap"],
   "key_trends": [{ "title": "string", "description": "1-2 sentences" }],
   "notable_exits": [{ "company": "string", "acquirer_or_ipo": "string", "year": "number", "value_display": "string" }],
   "data_sources": ["string"]
@@ -52,12 +52,14 @@ Schema:
 
 Rules:
 - 3-7 segments, 4-10 companies each
+- PRIORITIZE Pre-Seed, Seed, and Series A companies — at least 60% of companies per segment should be at these stages
+- Include a few Series B+ and public companies only as market context/comparables
 - Differentiator must describe the actual moat, not generic claims
 - Use "~" prefix on uncertain numbers
 - Include bootstrapped players if they exist
 - Include non-US companies if significant
 - Mark is_focal_company: true if the input was a company name
-- Always include 3-5 white_spaces — this is the highest-value output
+- Always include 3-5 white_spaces framed as early-stage investment opportunities
 - momentum_signal must be genuinely assessed, not all "Growing"
 - Return ONLY the raw JSON object. Your entire response must begin with { and end with }. No markdown, no code fences, no explanation before or after.`
 
@@ -117,7 +119,7 @@ export async function fetchMoreCompanies(
 ): Promise<Company[]> {
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
 
-  const prompt = `List ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market (${segmentDescription}).
+  const prompt = `List ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market (${segmentDescription}). Focus primarily on early-stage companies (Pre-Seed, Seed, Series A) — at least 70% should be at these stages.
 
 Exclude these already-listed companies: ${existingNames.join(', ')}
 

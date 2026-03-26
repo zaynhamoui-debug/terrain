@@ -322,7 +322,7 @@ export default function AppPage() {
               Terrain
             </h1>
             <span className="text-terrain-muted text-[10px] uppercase tracking-widest hidden sm:block">
-              Market Intelligence
+              Early-Stage Intelligence
             </span>
           </div>
 
@@ -475,7 +475,7 @@ export default function AppPage() {
                       TERRAIN
                     </h2>
                     <p className="text-terrain-gold text-sm font-mono mt-4 tracking-widest uppercase">
-                      Institutional-grade market intelligence. Powered by AI.
+                      Early-stage deal intelligence. Pre-Seed · Seed · Series A.
                     </p>
                   </div>
                 </>
@@ -651,6 +651,7 @@ export default function AppPage() {
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Stage</span>
                                   <button onClick={() => setStageFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!stageFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setStageFilter(stageFilter === 'Early Stage' ? null : 'Early Stage')} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter === 'Early Stage' ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-gold/70 hover:text-terrain-gold border border-terrain-goldBorder/40'}`}>⬡ Early Stage</button>
                                   {stages.map(stage => (
                                     <button key={stage} onClick={() => setStageFilter(stageFilter === stage ? null : stage)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter === stage ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{stage}</button>
                                   ))}

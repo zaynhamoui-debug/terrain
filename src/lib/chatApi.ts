@@ -45,7 +45,7 @@ ${map.white_spaces.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 KEY TRENDS:
 ${map.key_trends.map(t => `- ${t.title}: ${t.description}`).join('\n')}
 
-Answer questions about these companies concisely and insightfully. When assessing investment potential, consider: funding stage, momentum signal, differentiator strength, investor quality, customer traction, and market positioning. Be direct and opinionated — give real analysis, not generic advice. Keep responses focused and under 300 words unless a detailed comparison is requested. Use markdown formatting for clarity.`
+You are advising an early-stage VC firm that focuses exclusively on Pre-Seed, Seed, and Series A investments. Answer questions about these companies concisely and insightfully. When assessing investment potential, prioritize: team signal, product-market fit evidence, market size, early traction, differentiation, and whether the company is still at an investable early stage. For Series B+ or public companies, frame them as market context/comparables rather than direct investment targets. Be direct and opinionated — give real analysis, not generic advice. Keep responses focused and under 300 words unless a detailed comparison is requested. Use markdown formatting for clarity.`
 }
 
 export async function sendChatMessage(
@@ -80,23 +80,27 @@ export async function sendChatMessage(
 }
 
 export async function generateInvestmentMemo(company: Company, sector: string): Promise<string> {
-  const prompt = `Generate a concise investment memo for ${company.name} in the ${sector} market. Structure it as:
+  const isEarlyStage = ['Pre-Seed', 'Seed', 'Series A'].includes(company.stage ?? '')
+  const prompt = `Generate a concise early-stage VC investment memo for ${company.name} in the ${sector} market. This firm focuses on Pre-Seed, Seed, and Series A investments. Structure it as:
 
 **Company:** ${company.name}
 **Sector:** ${sector}
 **Stage:** ${company.stage} | **Funding:** ${company.funding_display}
-
+${!isEarlyStage ? '\n> ⚠️ Note: This company is beyond early-stage — evaluate as a market comparable.\n' : ''}
 **THE OPPORTUNITY**
-[2-3 sentences]
+[2-3 sentences on the problem and market]
 
-**BUSINESS MODEL**
-[2-3 sentences]
+**TEAM SIGNAL**
+[What the founding team background and early hires suggest about execution ability]
+
+**PRODUCT & TRACTION**
+[Evidence of product-market fit, early customers, or usage signals]
 
 **COMPETITIVE MOAT**
-[the differentiator]
+[The differentiator — what makes this defensible]
 
 **INVESTMENT THESIS**
-[2-3 sentences on why invest]
+[2-3 sentences on why invest now at this stage]
 
 **KEY RISKS**
 - Risk 1
@@ -104,7 +108,7 @@ export async function generateInvestmentMemo(company: Company, sector: string): 
 - Risk 3
 
 **VERDICT**
-[1 sentence recommendation]
+[1 sentence: strong pass / watch / invest — and why]
 
 Company details for reference:
 - Tagline: ${company.tagline}
@@ -146,7 +150,7 @@ Company details for reference:
 }
 
 export async function detectRedFlags(company: Company, sector: string): Promise<string> {
-  const prompt = `You are a critical investment analyst. Identify 3-5 potential red flags or concerns about ${company.name} in the ${sector} market. Be direct and specific. Return a concise bulleted list only — no preamble.
+  const prompt = `You are a critical early-stage VC analyst. Identify 3-5 potential red flags or concerns about ${company.name} in the ${sector} market from the perspective of a Pre-Seed/Seed/Series A investor. Focus on: weak PMF signals, team gaps, market timing risk, competitive threats, capital efficiency, and whether the company is still at an investable stage. Be direct and specific. Return a concise bulleted list only — no preamble.
 
 Company details:
 - Stage: ${company.stage}
