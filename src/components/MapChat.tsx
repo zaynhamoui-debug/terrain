@@ -5,6 +5,7 @@ import { sendChatMessage, ChatMessage } from '../lib/chatApi'
 interface Props {
   map: MarketMap
   onClose: () => void
+  initialQuestion?: string
 }
 
 const SUGGESTED = [
@@ -32,12 +33,13 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
   )
 }
 
-export default function MapChat({ map, onClose }: Props) {
+export default function MapChat({ map, onClose, initialQuestion }: Props) {
   const [messages,  setMessages]  = useState<ChatMessage[]>([])
   const [input,     setInput]     = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLTextAreaElement>(null)
+  const initialSentRef = useRef(false)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -46,6 +48,15 @@ export default function MapChat({ map, onClose }: Props) {
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // Auto-send initial question once on mount
+  useEffect(() => {
+    if (initialQuestion && !initialSentRef.current) {
+      initialSentRef.current = true
+      handleSend(initialQuestion)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion])
 
   async function handleSend(text?: string) {
     const content = (text ?? input).trim()
@@ -96,7 +107,7 @@ export default function MapChat({ map, onClose }: Props) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isLoading && (
           <div className="space-y-3">
             <p className="text-terrain-muted text-xs font-mono mb-5 leading-relaxed">
               Ask me anything about the companies in this map — investment potential, competitive dynamics, risks, or comparisons.

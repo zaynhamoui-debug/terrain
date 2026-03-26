@@ -114,6 +114,7 @@ export async function fetchMoreCompanies(
   existingNames: string[],
   batchSize = 20
 ): Promise<Company[]> {
+  console.log('[fetchMoreCompanies] called', { sector, segmentName, existingNames: existingNames.length })
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
 
   const prompt = `List ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market (${segmentDescription}).
@@ -164,11 +165,15 @@ Only real companies. No duplicates. Begin with [ and end with ].`
   if (!textBlock?.text) throw new Error('No text in API response')
 
   const raw = textBlock.text
+  console.log('[fetchMoreCompanies] raw response (first 300):', raw.slice(0, 300))
+
   const start = raw.indexOf('[')
   const end   = raw.lastIndexOf(']')
   if (start === -1 || end <= start) throw new Error(`Could not parse company array. Response: ${raw.slice(0, 200)}`)
 
-  return JSON.parse(raw.slice(start, end + 1)) as Company[]
+  const parsed = JSON.parse(raw.slice(start, end + 1)) as Company[]
+  console.log('[fetchMoreCompanies] parsed', parsed.length, 'companies')
+  return parsed
 }
 
 export async function generateMarketMap(query: string): Promise<MarketMap> {

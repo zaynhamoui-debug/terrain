@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Company } from '../types/marketMap'
 import { supabase } from '../lib/supabase'
 import { copyToClipboard } from '../lib/export'
+import { generateInvestmentMemo, detectRedFlags } from '../lib/chatApi'
 
 interface Props {
   company: Company
@@ -9,7 +10,20 @@ interface Props {
   onClose: () => void
   isWatchlisted?: boolean
   onToggleWatchlist?: (company: Company) => void
+  dealStatus?: string
+  onSetDealStatus?: (companyId: string, companyName: string, status: string | null) => void
+  sector?: string
 }
+
+const DEAL_STATUS_OPTIONS = [
+  { value: '',             label: 'None' },
+  { value: 'watching',     label: 'Watching' },
+  { value: 'outreach',     label: 'Outreach' },
+  { value: 'meeting',      label: 'Meeting' },
+  { value: 'due_diligence',label: 'Due Diligence' },
+  { value: 'portfolio',    label: 'Portfolio' },
+  { value: 'passed',       label: 'Passed' },
+]
 
 function Pill({ label, gold }: { label: string; gold?: boolean }) {
   return (
@@ -92,11 +106,30 @@ function FundingLadder({ stage }: { stage: string }) {
   )
 }
 
-export default function CompanyModal({ company, mapId, onClose, isWatchlisted, onToggleWatchlist }: Props) {
-  const [note,       setNote]       = useState('')
-  const [isSaving,   setIsSaving]   = useState(false)
-  const [saved,      setSaved]      = useState(false)
-  const [copiedJSON, setCopiedJSON] = useState(false)
+export default function CompanyModal({ company, mapId, onClose, isWatchlisted, onToggleWatchlist, dealStatus, onSetDealStatus, sector }: Props) {
+  const [note,         setNote]         = useState('')
+  const [isSaving,     setIsSaving]     = useState(false)
+  const [saved,        setSaved]        = useState(false)
+  const [copiedJSON,   setCopiedJSON]   = useState(false)
+
+  // Investment memo state
+  const [memo,         setMemo]         = useState('')
+  const [memoLoading,  setMemoLoading]  = useState(false)
+  const [memoError,    setMemoError]    = useState<string | null>(null)
+  const [memoExpanded, setMemoExpanded] = useState(true)
+
+  // Red flags state
+  const [redFlags,        setRedFlags]        = useState('')
+  const [redFlagsLoading, setRedFlagsLoading] = useState(false)
+  const [redFlagsError,   setRedFlagsError]   = useState<string | null>(null)
+
+  // Deal flow local state
+  const [localDealStatus, setLocalDealStatus] = useState(dealStatus ?? '')
+  const [dealSaving,      setDealSaving]      = useState(false)
+
+  useEffect(() => {
+    setLocalDealStatus(dealStatus ?? '')
+  }, [dealStatus])
 
   // Load note from Supabase
   useEffect(() => {
@@ -141,6 +174,63 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
     await copyToClipboard(JSON.stringify(company, null, 2))
     setCopiedJSON(true)
     setTimeout(() => setCopiedJSON(false), 2000)
+  }
+
+  async function handleGenerateMemo() {
+    setMemoLoading(true)
+    setMemoError(null)
+    setMemo('')
+    try {
+      const result = await generateInvestmentMemo(company, sector ?? 'Unknown')
+      setMemo(result)
+      setMemoExpanded(true)
+    } catch (err) {
+      setMemoError(err instanceof Error ? err.message : 'Failed to generate memo')
+    } finally {
+      setMemoLoading(false)
+    }
+  }
+
+  async function handleDetectRedFlags() {
+    setRedFlagsLoading(true)
+    setRedFlagsError(null)
+    setRedFlags('')
+    try {
+      const result = await detectRedFlags(company, sector ?? 'Unknown')
+      setRedFlags(result)
+    } catch (err) {
+      setRedFlagsError(err instanceof Error ? err.message : 'Failed to detect red flags')
+    } finally {
+      setRedFlagsLoading(false)
+    }
+  }
+
+  async function handleDealStatusChange(newStatus: string) {
+    setLocalDealStatus(newStatus)
+    setDealSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      if (!newStatus) {
+        await supabase.from('deal_flow').delete().eq('user_id', user.id).eq('company_id', company.id)
+        onSetDealStatus?.(company.id, company.name, null)
+      } else {
+        await supabase.from('deal_flow').upsert(
+          {
+            user_id: user.id,
+            company_id: company.id,
+            company_name: company.name,
+            status: newStatus,
+            map_id: mapId ?? undefined,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id,company_id' }
+        )
+        onSetDealStatus?.(company.id, company.name, newStatus)
+      }
+    } finally {
+      setDealSaving(false)
+    }
   }
 
   return (
@@ -275,6 +365,99 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
               </div>
             </div>
           )}
+
+          {/* Deal Flow */}
+          <div>
+            <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
+              Deal Flow
+            </div>
+            <div className="flex items-center gap-3">
+              <select
+                value={localDealStatus}
+                onChange={e => handleDealStatusChange(e.target.value)}
+                disabled={dealSaving}
+                className="bg-terrain-bg border border-terrain-border rounded px-3 py-2 text-terrain-text text-xs font-mono focus:outline-none focus:border-terrain-gold transition-colors disabled:opacity-40"
+              >
+                {DEAL_STATUS_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              {dealSaving && <span className="text-terrain-muted text-[10px] font-mono">saving…</span>}
+            </div>
+          </div>
+
+          {/* AI Actions: Generate Memo + Red Flags */}
+          <div>
+            <div className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono mb-3">
+              AI Analysis
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <button
+                onClick={handleGenerateMemo}
+                disabled={memoLoading}
+                className="flex items-center gap-1.5 px-4 py-2 bg-terrain-goldDim border border-terrain-goldBorder text-terrain-gold text-xs font-mono rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+              >
+                {memoLoading ? (
+                  <>
+                    <span className="w-3 h-3 border border-terrain-gold border-t-transparent rounded-full animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  'Generate Memo'
+                )}
+              </button>
+              <button
+                onClick={handleDetectRedFlags}
+                disabled={redFlagsLoading}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-950/40 border border-red-800/60 text-red-400 text-xs font-mono rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+              >
+                {redFlagsLoading ? (
+                  <>
+                    <span className="w-3 h-3 border border-red-400 border-t-transparent rounded-full animate-spin" />
+                    Analyzing…
+                  </>
+                ) : (
+                  '🚩 Red Flags'
+                )}
+              </button>
+            </div>
+
+            {/* Memo output */}
+            {(memo || memoError) && (
+              <div className="mt-4 border border-terrain-border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setMemoExpanded(e => !e)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-terrain-bg text-left"
+                >
+                  <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono">
+                    Investment Memo
+                  </span>
+                  <span className="text-terrain-muted text-xs">{memoExpanded ? '▾' : '▸'}</span>
+                </button>
+                {memoExpanded && (
+                  <div className="px-4 pb-4 bg-terrain-bg">
+                    {memoError ? (
+                      <p className="text-red-400 text-xs font-mono">{memoError}</p>
+                    ) : (
+                      <pre className="text-terrain-text text-xs font-mono leading-relaxed whitespace-pre-wrap">{memo}</pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Red flags output */}
+            {(redFlags || redFlagsError) && (
+              <div className="mt-3 px-4 py-3 border border-red-800/40 rounded-lg bg-red-950/20">
+                <div className="text-red-400 text-[10px] uppercase tracking-widest font-mono mb-2">Red Flags</div>
+                {redFlagsError ? (
+                  <p className="text-red-400 text-xs font-mono">{redFlagsError}</p>
+                ) : (
+                  <pre className="text-terrain-text text-xs font-mono leading-relaxed whitespace-pre-wrap">{redFlags}</pre>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Notes */}
           <div>

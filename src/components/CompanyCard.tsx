@@ -1,6 +1,6 @@
 import { Company } from '../types/marketMap'
 
-const STAGE_STYLES: Record<string, string> = {
+export const STAGE_STYLES: Record<string, string> = {
   'Pre-Seed':  'bg-slate-900  text-slate-400  border-slate-700',
   'Seed':      'bg-emerald-950 text-emerald-400 border-emerald-800',
   'Series A':  'bg-blue-950   text-blue-400   border-blue-800',
@@ -12,16 +12,28 @@ const STAGE_STYLES: Record<string, string> = {
   'Bootstrapped': 'bg-teal-950 text-teal-400  border-teal-800',
 }
 
+const DEAL_STATUS_STYLES: Record<string, { label: string; cls: string }> = {
+  watching:      { label: 'Watching',      cls: 'bg-blue-950 text-blue-400 border-blue-800' },
+  outreach:      { label: 'Outreach',      cls: 'bg-yellow-950 text-yellow-400 border-yellow-800' },
+  meeting:       { label: 'Meeting',       cls: 'bg-orange-950 text-orange-400 border-orange-800' },
+  due_diligence: { label: 'Due Diligence', cls: 'bg-violet-950 text-violet-400 border-violet-800' },
+  portfolio:     { label: 'Portfolio',     cls: 'bg-green-950 text-green-400 border-green-800' },
+  passed:        { label: 'Passed',        cls: 'bg-red-950 text-red-400 border-red-800' },
+}
+
 interface Props {
   company: Company
   onSelect: (company: Company) => void
   isWatchlisted?: boolean
   onToggleWatchlist?: (company: Company) => void
+  dealStatus?: string
+  onAskAI?: (company: Company) => void
 }
 
-export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist }: Props) {
+export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist, dealStatus, onAskAI }: Props) {
   const stageClass = STAGE_STYLES[company.stage] ?? 'bg-slate-900 text-slate-400 border-slate-700'
   const momentum   = company.momentum_signal?.split(' ')[0] ?? ''
+  const dealInfo   = dealStatus ? DEAL_STATUS_STYLES[dealStatus] : null
 
   return (
     <button
@@ -52,6 +64,15 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
           </span>
         )}
       </div>
+
+      {/* Deal flow status badge */}
+      {dealInfo && (
+        <div className="mb-2">
+          <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${dealInfo.cls}`}>
+            {dealInfo.label}
+          </span>
+        </div>
+      )}
 
       {/* Name + tagline */}
       <div className="mb-3 pr-12">
@@ -111,6 +132,21 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
           )}
         </div>
       </div>
+
+      {/* Ask AI button */}
+      {onAskAI && (
+        <div className="mt-3 pt-3 border-t border-terrain-border">
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={e => { e.stopPropagation(); onAskAI(company) }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onAskAI(company) } }}
+            className="text-[10px] font-mono text-terrain-gold border border-terrain-goldBorder bg-terrain-goldDim px-2 py-1 rounded hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            Ask AI ✦
+          </span>
+        </div>
+      )}
     </button>
   )
 }

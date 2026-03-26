@@ -12,6 +12,7 @@ import CompareView  from '../components/CompareView'
 import HeatmapView  from '../components/HeatmapView'
 import WatchlistPanel, { WatchlistItem } from '../components/WatchlistPanel'
 import MapChat from '../components/MapChat'
+import FundingChart from '../components/FundingChart'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { exportCSV, printMap } from '../lib/export'
 
@@ -49,6 +50,7 @@ export default function AppPage() {
   const [showExportMenu,  setShowExportMenu]   = useState(false)
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [showChat,        setShowChat]         = useState(false)
+  const [chatInitialQ,    setChatInitialQ]     = useState<string | undefined>(undefined)
   const [loadingMoreSegment, setLoadingMoreSegment] = useState<string | null>(null)
   const [loadMoreErrors,     setLoadMoreErrors]     = useState<Record<string, string>>({})
   const [stageFilter,     setStageFilter]      = useState<string | null>(null)
@@ -60,6 +62,13 @@ export default function AppPage() {
   const [companySearch,   setCompanySearch]    = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // Deal flow
+  const [dealFlowMap, setDealFlowMap] = useState<Record<string, string>>({})
+
+  // Rename state: mapId -> editing name
+  const [renamingId,    setRenamingId]    = useState<string | null>(null)
+  const [renameValue,   setRenameValue]   = useState('')
+
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onSearch:    () => { document.querySelector<HTMLInputElement>('input[placeholder*="sector"]')?.focus() },
@@ -70,7 +79,7 @@ export default function AppPage() {
     onExport:    () => { if (currentMap) exportCSV(currentMap) },
   })
 
-  // Auth check + load saved maps + watchlist
+  // Auth check + load saved maps + watchlist + deal flow
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) { navigate('/login'); return }
@@ -78,6 +87,7 @@ export default function AppPage() {
     })
     fetchSavedMaps()
     fetchWatchlist()
+    fetchDealFlow()
   }, [navigate])
 
   // Rotate loading messages
@@ -112,6 +122,19 @@ export default function AppPage() {
     if (data) {
       setWatchlistItems(data as WatchlistItem[])
       setWatchlistIds(new Set(data.map((i: WatchlistItem) => i.company_id)))
+    }
+  }
+
+  async function fetchDealFlow() {
+    const { data } = await supabase
+      .from('deal_flow')
+      .select('company_id, status')
+    if (data) {
+      const map: Record<string, string> = {}
+      for (const row of data as { company_id: string; status: string }[]) {
+        map[row.company_id] = row.status
+      }
+      setDealFlowMap(map)
     }
   }
 
@@ -158,6 +181,7 @@ export default function AppPage() {
     setCompanySearch('')
     setLoadingMsgIdx(0)
     setViewMode('grid')
+    setChatInitialQ(undefined)
 
     try {
       const map = await generateMarketMap(query)
@@ -192,7 +216,44 @@ export default function AppPage() {
       setActiveSegment(null)
       setError(null)
       setViewMode('grid')
+      setChatInitialQ(undefined)
     }
+  }
+
+  async function handleDeleteMap(mapId: string) {
+    if (!window.confirm('Delete this saved map? This cannot be undone.')) return
+    await supabase.from('saved_maps').delete().eq('id', mapId)
+    setSavedMaps(prev => prev.filter(m => m.id !== mapId))
+  }
+
+  function startRename(map: SavedMap) {
+    setRenamingId(map.id)
+    setRenameValue(map.query)
+  }
+
+  async function commitRename(mapId: string) {
+    const trimmed = renameValue.trim()
+    if (!trimmed) { setRenamingId(null); return }
+    await supabase.from('saved_maps').update({ query: trimmed }).eq('id', mapId)
+    setSavedMaps(prev => prev.map(m => m.id === mapId ? { ...m, query: trimmed } : m))
+    setRenamingId(null)
+  }
+
+  function handleSetDealStatus(companyId: string, _companyName: string, status: string | null) {
+    setDealFlowMap(prev => {
+      const next = { ...prev }
+      if (status === null) {
+        delete next[companyId]
+      } else {
+        next[companyId] = status
+      }
+      return next
+    })
+  }
+
+  function handleAskAI(company: Company) {
+    setChatInitialQ(`Tell me about ${company.name} — is it a promising investment?`)
+    setShowChat(true)
   }
 
   async function handleSignOut() {
@@ -201,8 +262,10 @@ export default function AppPage() {
   }
 
   async function handleLoadMore(segmentId: string) {
+    console.log('[handleLoadMore] segmentId:', segmentId, 'currentMap:', !!currentMap)
     if (!currentMap) return
     const segment = currentMap.segments.find(s => s.id === segmentId)
+    console.log('[handleLoadMore] segment found:', !!segment)
     if (!segment) return
     setLoadingMoreSegment(segmentId)
     try {
@@ -287,7 +350,7 @@ export default function AppPage() {
               <>
                 {/* AI Guide */}
                 <button
-                  onClick={() => setShowChat(c => !c)}
+                  onClick={() => { setChatInitialQ(undefined); setShowChat(c => !c) }}
                   className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-colors ${
                     showChat
                       ? 'border-terrain-gold text-terrain-gold'
@@ -443,6 +506,11 @@ export default function AppPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Funding chart — shown before segment filter tabs in grid view */}
+                {viewMode === 'grid' && (
+                  <FundingChart segments={currentMap.segments} />
+                )}
 
                 {/* Heatmap view */}
                 {viewMode === 'heatmap' && (
@@ -744,6 +812,8 @@ export default function AppPage() {
                         onLoadMore={() => handleLoadMore(segment.id)}
                         isLoadingMore={loadingMoreSegment === segment.id}
                         loadMoreError={loadMoreErrors[segment.id]}
+                        dealFlowMap={dealFlowMap}
+                        onAskAI={handleAskAI}
                       />
                     ))}
                   </>
@@ -806,20 +876,60 @@ export default function AppPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {savedMaps.map(map => (
-                    <button
+                    <div
                       key={map.id}
-                      onClick={() => loadSavedMap(map.id)}
-                      className="text-left px-5 py-4 bg-terrain-surface border border-terrain-border rounded-lg hover:border-terrain-subtle transition-colors group"
+                      className="relative group px-5 py-4 bg-terrain-surface border border-terrain-border rounded-lg hover:border-terrain-subtle transition-colors"
                     >
-                      <div className="text-terrain-text text-sm font-mono group-hover:text-terrain-gold transition-colors truncate">
-                        {map.query}
+                      {/* Main clickable area */}
+                      <button
+                        onClick={() => loadSavedMap(map.id)}
+                        className="w-full text-left"
+                      >
+                        {renamingId === map.id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onBlur={() => commitRename(map.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { e.preventDefault(); commitRename(map.id) }
+                              if (e.key === 'Escape') { setRenamingId(null) }
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full bg-terrain-bg border border-terrain-gold rounded px-2 py-0.5 text-terrain-text text-sm font-mono focus:outline-none"
+                          />
+                        ) : (
+                          <div className="text-terrain-text text-sm font-mono group-hover:text-terrain-gold transition-colors truncate pr-14">
+                            {map.query}
+                          </div>
+                        )}
+                        <div className="text-terrain-muted text-xs font-mono mt-1.5">
+                          {new Date(map.created_at).toLocaleDateString('en-US', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                          })}
+                        </div>
+                      </button>
+
+                      {/* Action buttons */}
+                      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* Rename */}
+                        <button
+                          onClick={e => { e.stopPropagation(); startRename(map) }}
+                          title="Rename"
+                          className="text-terrain-muted hover:text-terrain-gold text-sm leading-none px-1 py-0.5 transition-colors"
+                        >
+                          ✎
+                        </button>
+                        {/* Delete */}
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteMap(map.id) }}
+                          title="Delete"
+                          className="text-terrain-muted hover:text-red-400 text-base leading-none px-1 py-0.5 transition-colors"
+                        >
+                          ×
+                        </button>
                       </div>
-                      <div className="text-terrain-muted text-xs font-mono mt-1.5">
-                        {new Date(map.created_at).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric',
-                        })}
-                      </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -836,6 +946,9 @@ export default function AppPage() {
           onClose={() => setSelectedCompany(null)}
           isWatchlisted={watchlistIds.has(selectedCompany.id)}
           onToggleWatchlist={handleToggleWatchlist}
+          dealStatus={dealFlowMap[selectedCompany.id]}
+          onSetDealStatus={handleSetDealStatus}
+          sector={currentMap?.sector}
         />
       )}
 
@@ -857,7 +970,11 @@ export default function AppPage() {
 
       {/* AI Guide chat panel */}
       {showChat && currentMap && (
-        <MapChat map={currentMap} onClose={() => setShowChat(false)} />
+        <MapChat
+          map={currentMap}
+          onClose={() => { setShowChat(false); setChatInitialQ(undefined) }}
+          initialQuestion={chatInitialQ}
+        />
       )}
 
       {/* Hidden ref for search focus */}
