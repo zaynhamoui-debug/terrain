@@ -262,10 +262,8 @@ export default function AppPage() {
   }
 
   async function handleLoadMore(segmentId: string) {
-    console.log('[handleLoadMore] segmentId:', segmentId, 'currentMap:', !!currentMap)
     if (!currentMap) return
     const segment = currentMap.segments.find(s => s.id === segmentId)
-    console.log('[handleLoadMore] segment found:', !!segment)
     if (!segment) return
     setLoadingMoreSegment(segmentId)
     try {
