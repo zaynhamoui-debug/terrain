@@ -495,7 +495,7 @@ export default function AppPage() {
                     {LOADING_MESSAGES[loadingMsgIdx]}
                   </p>
                   <p className="text-terrain-subtle text-xs mt-2 font-mono">
-                    This may take 30–60 seconds
+                    This may take 10–15 seconds
                   </p>
                 </div>
               </div>

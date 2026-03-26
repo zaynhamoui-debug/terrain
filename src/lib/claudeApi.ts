@@ -1,84 +1,12 @@
 import { MarketMap, Company } from '../types/marketMap'
 
-const API_KEY         = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-const MODEL_FAST      = 'claude-haiku-4-5-20251001'
-const MODEL_FULL      = 'claude-sonnet-4-5'
-const MAX_TOKENS      = 16000
-const MAX_TOKENS_MORE = 8000
+const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY as string
+const MODEL_FAST = 'claude-haiku-4-5-20251001'
 
-const SYSTEM_PROMPT = `You are an elite early-stage venture capital analyst. Given a sector or company name, research and return a comprehensive market map focused on Pre-Seed, Seed, and Series A investment opportunities, as a single valid JSON object with NO markdown, no preamble, no text outside the JSON.
-
-Schema:
-{
-  "sector": "string",
-  "summary": "2-3 sentence landscape overview emphasizing early-stage opportunity",
-  "last_updated": "ISO date",
-  "total_market_size": "string e.g. '$4.2B TAM (2024)'",
-  "segments": [
-    {
-      "id": "snake_case",
-      "name": "string",
-      "description": "1 sentence",
-      "color": "hex color, unique per segment",
-      "companies": [
-        {
-          "id": "snake_case",
-          "name": "string",
-          "tagline": "string",
-          "founded": "number",
-          "stage": "Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped",
-          "total_funding_usd": "number",
-          "funding_display": "string e.g. '$142M'",
-          "last_round": "string e.g. 'Series C, Jan 2024'",
-          "valuation_display": "string",
-          "headcount_range": "string e.g. '50-200'",
-          "hq": "city, country",
-          "website": "domain only, e.g. acme.com",
-          "linkedin": "LinkedIn company page slug only, e.g. company/acme",
-          "differentiator": "1-2 sentences on moat, not marketing copy",
-          "key_customers": ["string"],
-          "investors": ["string"],
-          "momentum_signal": "🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth",
-          "is_focal_company": "boolean"
-        }
-      ]
-    }
-  ],
-  "white_spaces": ["string — each a 1-sentence early-stage investment opportunity or gap"],
-  "key_trends": [{ "title": "string", "description": "1-2 sentences" }],
-  "notable_exits": [{ "company": "string", "acquirer_or_ipo": "string", "year": "number", "value_display": "string" }],
-  "data_sources": ["string"]
-}
-
-Rules:
-- 3-7 segments, 4-10 companies each
-- PRIORITIZE Pre-Seed, Seed, and Series A companies — at least 60% of companies per segment should be at these stages
-- Include a few Series B+ and public companies only as market context/comparables
-- Differentiator must describe the actual moat, not generic claims
-- Use "~" prefix on uncertain numbers
-- Include bootstrapped players if they exist
-- Include non-US companies if significant
-- Mark is_focal_company: true if the input was a company name
-- Always include 3-5 white_spaces framed as early-stage investment opportunities
-- momentum_signal must be genuinely assessed, not all "Growing"
-- Return ONLY the raw JSON object. Your entire response must begin with { and end with }. No markdown, no code fences, no explanation before or after.`
-
-interface TextBlock { type: 'text'; text: string }
+interface TextBlock   { type: 'text'; text: string }
 interface ApiResponse { content: { type: string; text?: string }[] }
 
-function extractJson(raw: string): MarketMap {
-  // Slice from first '{' to last '}' — handles any preamble or trailing text
-  const start = raw.indexOf('{')
-  const end   = raw.lastIndexOf('}')
-
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(raw.slice(start, end + 1)) } catch { /* fall through */ }
-  }
-
-  throw new Error(`Could not parse JSON. Response started with: ${raw.slice(0, 200)}`)
-}
-
-async function callClaude(userContent: string): Promise<string> {
+async function callHaiku(system: string, user: string, maxTokens: number): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -89,9 +17,9 @@ async function callClaude(userContent: string): Promise<string> {
     },
     body: JSON.stringify({
       model:      MODEL_FAST,
-      max_tokens: MAX_TOKENS,
-      system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: userContent }],
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: user }],
     }),
   })
 
@@ -103,12 +31,104 @@ async function callClaude(userContent: string): Promise<string> {
   }
 
   const data: ApiResponse = await res.json()
-  const textBlock = data.content.find((b): b is TextBlock => b.type === 'text')
-  if (!textBlock?.text) throw new Error('No text in API response')
-  return textBlock.text
+  const block = data.content.find((b): b is TextBlock => b.type === 'text')
+  if (!block?.text) throw new Error('No text in API response')
+  return block.text
 }
 
-const MORE_SYSTEM = `You are a market intelligence analyst. Return ONLY a raw JSON array with no markdown, no code fences, no explanation. Your entire response must begin with [ and end with ].`
+// ─── Phase 1: Sector structure (no companies) ─────────────────────────────────
+
+const STRUCTURE_SYSTEM = `You are an early-stage VC market analyst. Return ONLY a raw JSON object — no markdown, no code fences. Response must begin with { and end with }.
+
+Return this exact structure:
+{
+  "sector": "string",
+  "summary": "2-3 sentences on landscape and early-stage opportunity",
+  "last_updated": "ISO date",
+  "total_market_size": "e.g. '$4.2B TAM (2024)'",
+  "segments": [
+    { "id": "snake_case", "name": "string", "description": "1 sentence", "color": "unique hex color" }
+  ],
+  "white_spaces": ["1-sentence early-stage opportunity"],
+  "key_trends": [{ "title": "string", "description": "1-2 sentences" }],
+  "notable_exits": [{ "company": "string", "acquirer_or_ipo": "string", "year": 2024, "value_display": "string" }],
+  "data_sources": ["string"]
+}
+
+Rules:
+- 4-5 segments, NO companies array inside segments
+- 3-4 white_spaces, 3-4 key_trends, 2-3 notable_exits
+- Return ONLY the raw JSON object`
+
+// ─── Phase 2: Companies per segment ───────────────────────────────────────────
+
+const COMPANIES_SYSTEM = `You are an early-stage VC analyst. Return ONLY a raw JSON array — no markdown, no code fences. Response must begin with [ and end with ].
+
+Each company object must have exactly these fields:
+{ "id": "snake_case", "name": "string", "tagline": "string", "founded": 2020, "stage": "Seed", "total_funding_usd": 0, "funding_display": "$2M", "last_round": "Seed, Jan 2024", "valuation_display": "~$12M", "headcount_range": "1-10", "hq": "city, country", "website": "acme.com", "linkedin": "company/acme", "differentiator": "1-2 sentences on actual moat", "key_customers": ["string"], "investors": ["string"], "momentum_signal": "📈 Growing", "is_focal_company": false }
+
+stage must be one of: Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped
+momentum_signal must be one of: 🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth
+At least 60% of companies must be Pre-Seed, Seed, or Series A.
+Only real companies. Return ONLY the raw JSON array.`
+
+async function generateSegmentCompanies(
+  sector: string,
+  segmentName: string,
+  segmentDescription: string,
+  query: string,
+  isFocalCompany: boolean,
+): Promise<Company[]> {
+  const prompt = `List 6 real companies in the "${segmentName}" segment of the ${sector} market.
+Segment description: ${segmentDescription}
+Original query: ${query}
+${isFocalCompany ? `If "${query}" fits this segment, include it with is_focal_company: true.` : ''}
+
+Prioritize Pre-Seed, Seed, Series A companies (at least 4 of 6). Include 1-2 Series B+ only as market context.
+Use "~" prefix on uncertain numbers. Include non-US companies if significant.`
+
+  const raw = await callHaiku(COMPANIES_SYSTEM, prompt, 4000)
+  const start = raw.indexOf('[')
+  const end   = raw.lastIndexOf(']')
+  if (start === -1 || end <= start) throw new Error(`Bad company array for segment "${segmentName}"`)
+  return JSON.parse(raw.slice(start, end + 1)) as Company[]
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function generateMarketMap(query: string): Promise<MarketMap> {
+  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
+
+  // Phase 1: get structure (fast, ~1500 tokens output)
+  const structureRaw = await callHaiku(STRUCTURE_SYSTEM, query, 1500)
+  const s = structureRaw.indexOf('{')
+  const e = structureRaw.lastIndexOf('}')
+  if (s === -1 || e <= s) throw new Error(`Could not parse structure. Response: ${structureRaw.slice(0, 200)}`)
+
+  type StructureMap = Omit<MarketMap, 'segments'> & { segments: { id: string; name: string; description: string; color: string }[] }
+  const structure = JSON.parse(structureRaw.slice(s, e + 1)) as StructureMap
+
+  // Phase 2: generate all segments in parallel
+  const isFocal = !structure.sector.toLowerCase().includes(query.toLowerCase().split(' ')[0])
+  const companiesPerSegment = await Promise.all(
+    structure.segments.map(seg =>
+      generateSegmentCompanies(structure.sector, seg.name, seg.description, query, isFocal)
+        .catch(() => [] as Company[])  // don't fail the whole map if one segment errors
+    )
+  )
+
+  return {
+    ...structure,
+    segments: structure.segments.map((seg, i) => ({
+      ...seg,
+      companies: companiesPerSegment[i] ?? [],
+    })),
+  }
+}
+
+// ─── Load more ────────────────────────────────────────────────────────────────
+
+const MORE_SYSTEM = `You are a market intelligence analyst. Return ONLY a raw JSON array with no markdown, no code fences. Your entire response must begin with [ and end with ].`
 
 export async function fetchMoreCompanies(
   sector: string,
@@ -139,54 +159,9 @@ Return a JSON array of ${batchSize} objects, each with exactly these fields:
 
 Only real companies. No duplicates. Begin with [ and end with ].`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':                                 API_KEY,
-      'anthropic-version':                         '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'content-type':                              'application/json',
-    },
-    body: JSON.stringify({
-      model:      MODEL_FULL,
-      max_tokens: MAX_TOKENS_MORE,
-      system:     MORE_SYSTEM,
-      messages:   [{ role: 'user', content: prompt }],
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(
-      (err as { error?: { message?: string } }).error?.message ?? `API error ${res.status}`
-    )
-  }
-
-  const data: ApiResponse = await res.json()
-  const textBlock = data.content.find((b): b is TextBlock => b.type === 'text')
-  if (!textBlock?.text) throw new Error('No text in API response')
-
-  const raw = textBlock.text
+  const raw = await callHaiku(MORE_SYSTEM, prompt, 8000)
   const start = raw.indexOf('[')
   const end   = raw.lastIndexOf(']')
   if (start === -1 || end <= start) throw new Error(`Could not parse company array. Response: ${raw.slice(0, 200)}`)
-
   return JSON.parse(raw.slice(start, end + 1)) as Company[]
-}
-
-export async function generateMarketMap(query: string): Promise<MarketMap> {
-  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
-
-  const text = await callClaude(query)
-
-  try {
-    return extractJson(text)
-  } catch {
-    // Retry once, asking Claude to fix the JSON
-    const retryText = await callClaude(
-      `You previously returned this response for the query "${query}":\n\n${text}\n\n` +
-      `It could not be parsed as JSON. Return ONLY the corrected JSON object with no markdown, no explanation, no code fences.`
-    )
-    return extractJson(retryText)
-  }
 }
