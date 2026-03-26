@@ -220,6 +220,7 @@ export default function CompanyModal({ company, mapId, onClose, isWatchlisted, o
             user_id: user.id,
             company_id: company.id,
             company_name: company.name,
+            company_data: company,
             status: newStatus,
             map_id: mapId ?? undefined,
             updated_at: new Date().toISOString(),

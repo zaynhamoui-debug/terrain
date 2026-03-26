@@ -13,6 +13,7 @@ import HeatmapView  from '../components/HeatmapView'
 import WatchlistPanel, { WatchlistItem } from '../components/WatchlistPanel'
 import MapChat from '../components/MapChat'
 import FundingChart from '../components/FundingChart'
+import DealFlowPipeline from '../components/DealFlowPipeline'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { exportCSV, printMap } from '../lib/export'
 
@@ -27,7 +28,7 @@ const LOADING_MESSAGES = [
   'Validating company profiles…',
 ]
 
-type ViewMode = 'grid' | 'heatmap' | 'compare'
+type ViewMode = 'grid' | 'heatmap' | 'compare' | 'pipeline'
 
 export default function AppPage() {
   const navigate = useNavigate()
@@ -297,7 +298,7 @@ export default function AppPage() {
     s => !activeSegment || s.id === activeSegment
   ) ?? []
 
-  const hasMap = !!currentMap || viewMode === 'compare'
+  const hasMap = !!currentMap || viewMode === 'compare' || viewMode === 'pipeline'
 
   return (
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
@@ -326,7 +327,7 @@ export default function AppPage() {
           {/* View mode tabs — shown when there's content */}
           {hasMap && (
             <div className="flex items-center gap-1 bg-terrain-surface border border-terrain-border rounded px-1 py-1">
-              {(['grid', 'heatmap', 'compare'] as ViewMode[]).map(mode => (
+              {(['grid', 'heatmap', 'compare', 'pipeline'] as ViewMode[]).map(mode => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -336,13 +337,26 @@ export default function AppPage() {
                       : 'text-terrain-muted hover:text-terrain-text'
                   }`}
                 >
-                  {mode}
+                  {mode === 'pipeline' ? 'Pipeline' : mode}
                 </button>
               ))}
             </div>
           )}
 
           <div className="flex items-center gap-3">
+            {/* Pipeline — always visible */}
+            <button
+              onClick={() => setViewMode(v => v === 'pipeline' ? 'grid' : 'pipeline')}
+              className={`flex items-center gap-1.5 text-xs font-mono border px-3 py-1.5 rounded transition-colors ${
+                viewMode === 'pipeline'
+                  ? 'border-terrain-gold text-terrain-gold'
+                  : 'border-terrain-border text-terrain-muted hover:text-terrain-gold'
+              }`}
+            >
+              <span>⬡</span>
+              <span className="hidden sm:inline">Pipeline</span>
+            </button>
+
             {/* Action buttons — shown when there's a map */}
             {currentMap && (
               <>
@@ -433,7 +447,18 @@ export default function AppPage() {
           <CompareView onCompanyClick={setSelectedCompany} />
         )}
 
-        {viewMode !== 'compare' && (
+        {/* Pipeline view */}
+        {viewMode === 'pipeline' && (
+          <div>
+            <div className="pt-8 pb-4">
+              <h2 className="font-display text-3xl font-bold text-terrain-text">Deal Flow Pipeline</h2>
+              <p className="text-terrain-muted text-sm font-mono mt-2">Drag companies between stages or use the move buttons.</p>
+            </div>
+            <DealFlowPipeline onCompanyClick={company => setSelectedCompany(company)} />
+          </div>
+        )}
+
+        {viewMode !== 'compare' && viewMode !== 'pipeline' && (
           <>
             {/* Hero search area */}
             <div className={`${currentMap ? 'py-10' : 'py-20'} transition-all`}>
