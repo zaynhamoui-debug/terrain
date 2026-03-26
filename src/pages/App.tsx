@@ -54,12 +54,12 @@ export default function AppPage() {
   const [chatInitialQ,    setChatInitialQ]     = useState<string | undefined>(undefined)
   const [loadingMoreSegment, setLoadingMoreSegment] = useState<string | null>(null)
   const [loadMoreErrors,     setLoadMoreErrors]     = useState<Record<string, string>>({})
-  const [stageFilter,     setStageFilter]      = useState<string | null>(null)
-  const [headcountFilter, setHeadcountFilter]  = useState<string | null>(null)
-  const [hqFilter,        setHqFilter]         = useState<string | null>(null)
-  const [momentumFilter,  setMomentumFilter]   = useState<string | null>(null)
-  const [foundedFilter,   setFoundedFilter]    = useState<string | null>(null)
-  const [investorFilter,  setInvestorFilter]   = useState<string | null>(null)
+  const [stageFilter,     setStageFilter]      = useState<string[]>([])
+  const [headcountFilter, setHeadcountFilter]  = useState<string[]>([])
+  const [hqFilter,        setHqFilter]         = useState<string[]>([])
+  const [momentumFilter,  setMomentumFilter]   = useState<string[]>([])
+  const [foundedFilter,   setFoundedFilter]    = useState<string[]>([])
+  const [investorFilter,  setInvestorFilter]   = useState<string[]>([])
   const [companySearch,   setCompanySearch]    = useState('')
   const [showFilters,     setShowFilters]      = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -174,12 +174,12 @@ export default function AppPage() {
     setCurrentMap(null)
     setCurrentMapId(null)
     setActiveSegment(null)
-    setStageFilter(null)
-    setHeadcountFilter(null)
-    setHqFilter(null)
-    setMomentumFilter(null)
-    setFoundedFilter(null)
-    setInvestorFilter(null)
+    setStageFilter([])
+    setHeadcountFilter([])
+    setHqFilter([])
+    setMomentumFilter([])
+    setFoundedFilter([])
+    setInvestorFilter([])
     setCompanySearch('')
     setShowFilters(false)
     setLoadingMsgIdx(0)
@@ -580,7 +580,7 @@ export default function AppPage() {
 
                     {/* Compact filter bar */}
                     {(() => {
-                      const activeFilterCount = [stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch].filter(Boolean).length
+                      const activeFilterCount = [stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter].reduce((n, f) => n + f.length, 0) + (companySearch ? 1 : 0)
 
                       const stages = Array.from(new Set(currentMap.segments.flatMap(s => s.companies.map(c => c.stage)))).filter(Boolean)
                       const STAGE_ORDER = ['Pre-Seed','Seed','Series A','Series B','Series C','Series D+','Public','Bootstrapped','Acquired']
@@ -633,8 +633,8 @@ export default function AppPage() {
                             {activeFilterCount > 0 && (
                               <button
                                 onClick={() => {
-                                  setStageFilter(null); setHeadcountFilter(null); setHqFilter(null)
-                                  setMomentumFilter(null); setFoundedFilter(null); setInvestorFilter(null); setCompanySearch('')
+                                  setStageFilter([]); setHeadcountFilter([]); setHqFilter([])
+                                  setMomentumFilter([]); setFoundedFilter([]); setInvestorFilter([]); setCompanySearch('')
                                 }}
                                 className="text-terrain-muted text-xs font-mono hover:text-terrain-gold transition-colors underline underline-offset-2"
                               >
@@ -650,10 +650,10 @@ export default function AppPage() {
                               {stages.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Stage</span>
-                                  <button onClick={() => setStageFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!stageFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
-                                  <button onClick={() => setStageFilter(stageFilter === 'Early Stage' ? null : 'Early Stage')} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter === 'Early Stage' ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-gold/70 hover:text-terrain-gold border border-terrain-goldBorder/40'}`}>⬡ Early Stage</button>
+                                  <button onClick={() => setStageFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setStageFilter(f => f.includes('Early Stage') ? f.filter(x => x !== 'Early Stage') : [...f, 'Early Stage'])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter.includes('Early Stage') ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-gold/70 hover:text-terrain-gold border border-terrain-goldBorder/40'}`}>⬡ Early Stage</button>
                                   {stages.map(stage => (
-                                    <button key={stage} onClick={() => setStageFilter(stageFilter === stage ? null : stage)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter === stage ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{stage}</button>
+                                    <button key={stage} onClick={() => setStageFilter(f => f.includes(stage) ? f.filter(x => x !== stage) : [...f, stage])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${stageFilter.includes(stage) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{stage}</button>
                                   ))}
                                 </div>
                               )}
@@ -661,9 +661,9 @@ export default function AppPage() {
                               {ranges.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Size</span>
-                                  <button onClick={() => setHeadcountFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!headcountFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setHeadcountFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${headcountFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
                                   {ranges.map(range => (
-                                    <button key={range} onClick={() => setHeadcountFilter(headcountFilter === range ? null : range)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${headcountFilter === range ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{range}</button>
+                                    <button key={range} onClick={() => setHeadcountFilter(f => f.includes(range) ? f.filter(x => x !== range) : [...f, range])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${headcountFilter.includes(range) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{range}</button>
                                   ))}
                                 </div>
                               )}
@@ -671,9 +671,9 @@ export default function AppPage() {
                               {presentRanges.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Founded</span>
-                                  <button onClick={() => setFoundedFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!foundedFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setFoundedFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${foundedFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
                                   {presentRanges.map(r => (
-                                    <button key={r.label} onClick={() => setFoundedFilter(foundedFilter === r.label ? null : r.label)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${foundedFilter === r.label ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{r.label}</button>
+                                    <button key={r.label} onClick={() => setFoundedFilter(f => f.includes(r.label) ? f.filter(x => x !== r.label) : [...f, r.label])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${foundedFilter.includes(r.label) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{r.label}</button>
                                   ))}
                                 </div>
                               )}
@@ -681,9 +681,9 @@ export default function AppPage() {
                               {signals.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Signal</span>
-                                  <button onClick={() => setMomentumFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!momentumFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setMomentumFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${momentumFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
                                   {signals.map(signal => (
-                                    <button key={signal} onClick={() => setMomentumFilter(momentumFilter === signal ? null : signal)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${momentumFilter === signal ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{signal}</button>
+                                    <button key={signal} onClick={() => setMomentumFilter(f => f.includes(signal) ? f.filter(x => x !== signal) : [...f, signal])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${momentumFilter.includes(signal) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{signal}</button>
                                   ))}
                                 </div>
                               )}
@@ -691,9 +691,9 @@ export default function AppPage() {
                               {locations.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">HQ</span>
-                                  <button onClick={() => setHqFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!hqFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setHqFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${hqFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
                                   {locations.map(loc => (
-                                    <button key={loc} onClick={() => setHqFilter(hqFilter === loc ? null : loc)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${hqFilter === loc ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{loc}</button>
+                                    <button key={loc} onClick={() => setHqFilter(f => f.includes(loc) ? f.filter(x => x !== loc) : [...f, loc])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${hqFilter.includes(loc) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{loc}</button>
                                   ))}
                                 </div>
                               )}
@@ -701,9 +701,9 @@ export default function AppPage() {
                               {investors.length > 0 && (
                                 <div className="flex gap-2 flex-wrap items-center">
                                   <span className="text-terrain-muted text-[10px] uppercase tracking-widest font-mono w-16 shrink-0">Investor</span>
-                                  <button onClick={() => setInvestorFilter(null)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${!investorFilter ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
+                                  <button onClick={() => setInvestorFilter([])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest uppercase transition-colors ${investorFilter.length === 0 ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>All</button>
                                   {investors.map(inv => (
-                                    <button key={inv} onClick={() => setInvestorFilter(investorFilter === inv ? null : inv)} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${investorFilter === inv ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{inv}</button>
+                                    <button key={inv} onClick={() => setInvestorFilter(f => f.includes(inv) ? f.filter(x => x !== inv) : [...f, inv])} className={`px-3 py-1 rounded text-[10px] font-mono tracking-widest transition-colors ${investorFilter.includes(inv) ? 'bg-terrain-gold text-terrain-bg font-bold' : 'bg-terrain-bg text-terrain-muted hover:text-terrain-text border border-terrain-border'}`}>{inv}</button>
                                   ))}
                                 </div>
                               )}

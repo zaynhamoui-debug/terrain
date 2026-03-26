@@ -7,12 +7,12 @@ interface Props {
   onCompanyClick: (company: Company) => void
   watchlistIds?: Set<string>
   onToggleWatchlist?: (company: Company) => void
-  stageFilter?: string | null
-  headcountFilter?: string | null
-  hqFilter?: string | null
-  momentumFilter?: string | null
-  foundedFilter?: string | null
-  investorFilter?: string | null
+  stageFilter?: string[]
+  headcountFilter?: string[]
+  hqFilter?: string[]
+  momentumFilter?: string[]
+  foundedFilter?: string[]
+  investorFilter?: string[]
   companySearch?: string
   onLoadMore?: () => void
   isLoadingMore?: boolean
@@ -33,18 +33,19 @@ const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
 export default function SegmentRow({ segment, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, onLoadMore, isLoadingMore, loadMoreError, dealFlowMap, onAskAI }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
+  const EARLY_STAGES = ['Pre-Seed', 'Seed', 'Series A']
   const q = companySearch?.toLowerCase().trim() ?? ''
   const companies = segment.companies.filter(c => {
-    if (stageFilter === 'Early Stage') {
-      if (!['Pre-Seed', 'Seed', 'Series A'].includes(c.stage ?? '')) return false
-    } else if (stageFilter && c.stage !== stageFilter) return false
-    if (headcountFilter && c.headcount_range !== headcountFilter) return false
-    if (hqFilter && c.hq !== hqFilter) return false
-    if (momentumFilter && c.momentum_signal !== momentumFilter) return false
-    if (investorFilter && !c.investors?.includes(investorFilter)) return false
-    if (foundedFilter && c.founded) {
-      const test = FOUNDED_RANGES[foundedFilter]
-      if (test && !test(c.founded)) return false
+    if (stageFilter && stageFilter.length > 0) {
+      const expanded = stageFilter.flatMap(f => f === 'Early Stage' ? EARLY_STAGES : [f])
+      if (!expanded.includes(c.stage ?? '')) return false
+    }
+    if (headcountFilter && headcountFilter.length > 0 && !headcountFilter.includes(c.headcount_range ?? '')) return false
+    if (hqFilter && hqFilter.length > 0 && !hqFilter.includes(c.hq ?? '')) return false
+    if (momentumFilter && momentumFilter.length > 0 && !momentumFilter.includes(c.momentum_signal ?? '')) return false
+    if (investorFilter && investorFilter.length > 0 && !c.investors?.some(inv => investorFilter.includes(inv))) return false
+    if (foundedFilter && foundedFilter.length > 0 && c.founded) {
+      if (!foundedFilter.some(f => FOUNDED_RANGES[f]?.(c.founded!))) return false
     }
     if (q && !c.name.toLowerCase().includes(q) && !c.tagline?.toLowerCase().includes(q)) return false
     return true
