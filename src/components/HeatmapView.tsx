@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MarketMap, Segment, Company } from '../types/marketMap'
 import { searchAndEnrichSegment } from '../lib/claudeApi'
+import { scoreToColor } from './CompanyCard'
 
 const MOMENTUM_COLS = [
   { key: '🚀 Hypergrowth', emoji: '🚀', label: 'Hypergrowth' },
@@ -14,9 +15,10 @@ const MOMENTUM_COLS = [
 interface Props {
   map: MarketMap
   onCompanyClick: (company: Company) => void
+  scoresMap?: Record<string, number>
 }
 
-export default function HeatmapView({ map, onCompanyClick }: Props) {
+export default function HeatmapView({ map, onCompanyClick, scoresMap }: Props) {
   const navigate = useNavigate()
   const [segments, setSegments] = useState<Segment[]>(map.segments)
   const [loadingAll, setLoadingAll] = useState(false)
@@ -128,24 +130,40 @@ export default function HeatmapView({ map, onCompanyClick }: Props) {
                   return (
                     <td key={col.key} className="px-2 py-2 align-top border-b border-terrain-border/40">
                       <div className="flex flex-col gap-1">
-                        {companies.map(company => (
-                          <button
-                            key={company.id}
-                            onClick={() => onCompanyClick(company)}
-                            className={`text-left px-2 py-1.5 rounded text-[11px] font-mono leading-tight transition-all hover:scale-[1.02] ${
-                              company.is_focal_company
-                                ? 'bg-terrain-goldDim border border-terrain-goldBorder text-terrain-gold'
-                                : 'bg-terrain-surface border border-terrain-border text-terrain-text hover:border-terrain-subtle'
-                            }`}
-                          >
-                            {company.name}
-                            {company.funding_display && (
-                              <span className="block text-terrain-muted text-[10px] mt-0.5">
-                                {company.funding_display}
+                        {companies.map(company => {
+                          const score = scoresMap?.[company.id]
+                          const hue = score ? Math.round(((score - 1) / 9) * 120) : null
+                          const scoreStyle = (score && !company.is_focal_company) ? {
+                            borderColor: `hsl(${hue}, 55%, 28%)`,
+                            backgroundColor: `hsl(${hue}, 55%, 7%)`,
+                          } : {}
+                          return (
+                            <button
+                              key={company.id}
+                              onClick={() => onCompanyClick(company)}
+                              style={scoreStyle}
+                              className={`text-left px-2 py-1.5 rounded text-[11px] font-mono leading-tight transition-all hover:scale-[1.02] ${
+                                company.is_focal_company
+                                  ? 'bg-terrain-goldDim border border-terrain-goldBorder text-terrain-gold'
+                                  : 'border bg-terrain-surface text-terrain-text hover:brightness-110'
+                              } ${!score && !company.is_focal_company ? 'border-terrain-border' : ''}`}
+                            >
+                              <span className="flex items-center justify-between gap-1">
+                                <span className="truncate">{company.name}</span>
+                                {score && (
+                                  <span className="shrink-0 text-[9px] font-bold" style={{ color: scoreToColor(score) }}>
+                                    {score}
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </button>
-                        ))}
+                              {company.funding_display && (
+                                <span className="block text-terrain-muted text-[10px] mt-0.5">
+                                  {company.funding_display}
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
                       </div>
                     </td>
                   )

@@ -95,6 +95,9 @@ export default function AppPage() {
     fetchDealFlow()
     fetchIndustries()
     fetchTracking()
+    // Restore last map after back navigation
+    const lastMapId = sessionStorage.getItem('terrain_last_map_id')
+    if (lastMapId) loadSavedMap(lastMapId)
   }, [navigate])
 
   // Rotate loading messages
@@ -227,7 +230,10 @@ export default function AppPage() {
         .select('id')
         .single()
 
-      if (!saveErr && data) setCurrentMapId(data.id)
+      if (!saveErr && data) {
+        setCurrentMapId(data.id)
+        sessionStorage.setItem('terrain_last_map_id', data.id)
+      }
       fetchSavedMaps()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to generate market map'
@@ -246,6 +252,7 @@ export default function AppPage() {
     if (data) {
       setCurrentMap(data.map_data as MarketMap)
       setCurrentMapId(data.id)
+      sessionStorage.setItem('terrain_last_map_id', data.id)
       setActiveSegment(null)
       setError(null)
       setViewMode('grid')
@@ -571,7 +578,7 @@ export default function AppPage() {
 
                 {/* Heatmap view */}
                 {viewMode === 'heatmap' && (
-                  <HeatmapView map={currentMap} onCompanyClick={setSelectedCompany} />
+                  <HeatmapView map={currentMap} onCompanyClick={setSelectedCompany} scoresMap={scoresMap} />
                 )}
 
                 {/* Grid view */}
