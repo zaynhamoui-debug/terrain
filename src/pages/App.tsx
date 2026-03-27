@@ -713,6 +713,15 @@ export default function AppPage() {
                       )
                     })()}
 
+                    {/* Empty DB state */}
+                    {currentMap.segments.every(s => s.companies.length === 0) && (
+                      <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="text-terrain-muted text-4xl mb-4">⬡</div>
+                        <p className="text-terrain-muted text-sm font-mono">No companies found in the database for this query.</p>
+                        <p className="text-terrain-subtle text-xs font-mono mt-2">Try a different sector or industry keyword.</p>
+                      </div>
+                    )}
+
                     {/* Segments */}
                     {visibleSegments.map(segment => (
                       <SegmentRow

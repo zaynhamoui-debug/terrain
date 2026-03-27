@@ -50,30 +50,42 @@ async function callHaiku(system: string, user: string, maxTokens: number): Promi
 
 // ─── Search real companies from Clay database ─────────────────────────────────
 
-async function searchClayCompanies(query: string, limit = 80): Promise<ClayCompany[]> {
-  // Try full-text search first
-  const { data: ftData } = await supabase
+async function searchClayCompanies(query: string, limit = 80, excludeNames: string[] = []): Promise<ClayCompany[]> {
+  const select = 'name, description, industry, headcount, location, country, website, linkedin'
+
+  // Full-text search first
+  let q = supabase
     .from('clay_companies')
-    .select('name, description, industry, headcount, location, country, website, linkedin')
-    .textSearch('search_vec', query.split(' ').join(' & '), { config: 'english' })
+    .select(select)
+    .textSearch('search_vec', query.split(' ').filter(t => t.length > 1).join(' & '), { config: 'english' })
     .limit(limit)
 
+  if (excludeNames.length > 0) {
+    q = q.not('name', 'in', `(${excludeNames.map(n => `"${n}"`).join(',')})`)
+  }
+
+  const { data: ftData } = await q
   if (ftData && ftData.length >= 10) return ftData as ClayCompany[]
 
   // Fall back to ILIKE on industry + name
   const terms = query.split(' ').filter(t => t.length > 2)
   const ilikeFilter = terms.map(t => `industry.ilike.%${t}%,name.ilike.%${t}%`).join(',')
 
-  const { data: ilikeData } = await supabase
+  let q2 = supabase
     .from('clay_companies')
-    .select('name, description, industry, headcount, location, country, website, linkedin')
+    .select(select)
     .or(ilikeFilter)
     .limit(limit)
 
+  if (excludeNames.length > 0) {
+    q2 = q2.not('name', 'in', `(${excludeNames.map(n => `"${n}"`).join(',')})`)
+  }
+
+  const { data: ilikeData } = await q2
   return (ilikeData ?? []) as ClayCompany[]
 }
 
-// ─── Phase 1: Sector structure (no companies) ─────────────────────────────────
+// ─── Sector structure (no companies) ─────────────────────────────────────────
 
 const STRUCTURE_SYSTEM = `You are an early-stage VC market analyst. Return ONLY a raw JSON object — no markdown, no code fences. Response must begin with { and end with }.
 
@@ -132,14 +144,13 @@ Each segment:
 }
 
 Rules:
-- Use ONLY companies provided — do NOT invent companies
+- Use ONLY companies provided — do NOT invent any companies
 - company name must exactly match the input name
 - Use provided website, linkedin, headcount, location — do not change them
 - For stage/funding/investors: use your knowledge of these real companies; prefix uncertain values with "~"
 - stage: Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped
 - momentum_signal: 🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth
 - Group into 3-5 thematic segments based on the query
-- Prioritize early-stage companies when multiple options fit a segment
 - Return ONLY the raw JSON array`
 
 async function organizeRealCompanies(
@@ -171,47 +182,17 @@ ${JSON.stringify(companyList, null, 1)}`
   return JSON.parse(raw.slice(start, end + 1))
 }
 
-// ─── Phase 2 fallback: AI-generated companies per segment ─────────────────────
-
-const COMPANIES_SYSTEM = `You are an early-stage VC analyst. Return ONLY a raw JSON array — no markdown, no code fences. Response must begin with [ and end with ].
-
-Each company object must have exactly these fields:
-{ "id": "snake_case", "name": "string", "tagline": "string", "founded": 2020, "stage": "Seed", "total_funding_usd": 0, "funding_display": "$2M", "last_round": "Seed, Jan 2024", "valuation_display": "~$12M", "headcount_range": "1-10", "hq": "city, country", "website": "acme.com", "linkedin": "company/acme", "differentiator": "1-2 sentences on actual moat", "key_customers": ["string"], "investors": ["string"], "momentum_signal": "📈 Growing", "is_focal_company": false }
-
-stage must be one of: Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped
-momentum_signal must be one of: 🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth
-At least 60% of companies must be Pre-Seed, Seed, or Series A.
-Only real companies. Return ONLY the raw JSON array.`
-
-async function generateSegmentCompanies(
-  sector: string,
-  segmentName: string,
-  segmentDescription: string,
-  query: string,
-  isFocalCompany: boolean,
-): Promise<Company[]> {
-  const prompt = `List 6 real companies in the "${segmentName}" segment of the ${sector} market.
-Segment description: ${segmentDescription}
-Original query: ${query}
-${isFocalCompany ? `If "${query}" fits this segment, include it with is_focal_company: true.` : ''}
-
-Prioritize Pre-Seed, Seed, Series A companies (at least 4 of 6). Include 1-2 Series B+ only as market context.
-Use "~" prefix on uncertain numbers. Include non-US companies if significant.`
-
-  const raw = await callHaiku(COMPANIES_SYSTEM, prompt, 4000)
-  const start = raw.indexOf('[')
-  const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error(`Bad company array for segment "${segmentName}"`)
-  return JSON.parse(raw.slice(start, end + 1)) as Company[]
-}
-
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function generateMarketMap(query: string): Promise<MarketMap> {
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
 
-  // Phase 1: sector structure (always fast)
-  const structureRaw = await callHaiku(STRUCTURE_SYSTEM, query, 1500)
+  // Run structure + DB search in parallel
+  const [structureRaw, realCompanies] = await Promise.all([
+    callHaiku(STRUCTURE_SYSTEM, query, 1500),
+    searchClayCompanies(query).catch(() => [] as ClayCompany[]),
+  ])
+
   const s = structureRaw.indexOf('{')
   const e = structureRaw.lastIndexOf('}')
   if (s === -1 || e <= s) throw new Error(`Could not parse structure. Response: ${structureRaw.slice(0, 200)}`)
@@ -219,87 +200,75 @@ export async function generateMarketMap(query: string): Promise<MarketMap> {
   type StructureMap = Omit<MarketMap, 'segments'> & { segments: { id: string; name: string; description: string; color: string }[] }
   const structure = JSON.parse(structureRaw.slice(s, e + 1)) as StructureMap
 
-  // Phase 2a: try to find real companies from Clay database
-  const realCompanies = await searchClayCompanies(query).catch(() => [] as ClayCompany[])
-
-  if (realCompanies.length >= 10) {
-    // Organize real companies into segments
-    const organizedSegments = await organizeRealCompanies(query, structure.sector, realCompanies)
-      .catch(() => null)
-
-    if (organizedSegments && organizedSegments.length > 0) {
-      // Merge segment colors from structure into organized segments
-      const colorMap: Record<string, string> = {}
-      structure.segments.forEach((seg, i) => {
-        colorMap[i] = seg.color
-      })
-
-      return {
-        ...structure,
-        segments: organizedSegments.map((seg, i) => ({
-          ...seg,
-          description: structure.segments[i]?.description ?? '',
-          color: structure.segments[i]?.color ?? '#c9a84c',
-          companies: seg.companies ?? [],
-        })),
-      }
+  if (realCompanies.length === 0) {
+    // No matches in database — return structure with empty segments
+    return {
+      ...structure,
+      segments: structure.segments.map(seg => ({ ...seg, companies: [] })),
     }
   }
 
-  // Phase 2b: fallback — AI-generated companies (no Clay data for this query)
-  const isFocal = !structure.sector.toLowerCase().includes(query.toLowerCase().split(' ')[0])
-  const companiesPerSegment = await Promise.all(
-    structure.segments.map(seg =>
-      generateSegmentCompanies(structure.sector, seg.name, seg.description, query, isFocal)
-        .catch(() => [] as Company[])
-    )
-  )
+  // Organize real companies into segments
+  const organizedSegments = await organizeRealCompanies(query, structure.sector, realCompanies)
 
   return {
     ...structure,
-    segments: structure.segments.map((seg, i) => ({
+    segments: organizedSegments.map((seg, i) => ({
       ...seg,
-      companies: companiesPerSegment[i] ?? [],
+      description: structure.segments[i]?.description ?? '',
+      color: structure.segments[i]?.color ?? '#c9a84c',
+      companies: seg.companies ?? [],
     })),
   }
 }
 
-// ─── Load more ────────────────────────────────────────────────────────────────
-
-const MORE_SYSTEM = `You are a market intelligence analyst. Return ONLY a raw JSON array with no markdown, no code fences. Your entire response must begin with [ and end with ].`
+// ─── Load more from Clay database ────────────────────────────────────────────
 
 export async function fetchMoreCompanies(
   sector: string,
   segmentName: string,
   segmentDescription: string,
   existingNames: string[],
-  batchSize = 20
 ): Promise<Company[]> {
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
 
-  const prompt = `List ${batchSize} real companies in the "${segmentName}" segment of the ${sector} market (${segmentDescription}). Focus primarily on early-stage companies (Pre-Seed, Seed, Series A) — at least 70% should be at these stages.
+  // Search Clay DB for more companies matching the segment
+  const searchQuery = `${segmentName} ${sector}`
+  const candidates = await searchClayCompanies(searchQuery, 40, existingNames)
 
-Exclude these already-listed companies: ${existingNames.join(', ')}
+  if (candidates.length === 0) throw new Error('No more companies found in the database for this segment.')
 
-Return a JSON array of ${batchSize} objects, each with exactly these fields:
-["id","name","tagline","founded","stage","total_funding_usd","funding_display","last_round","valuation_display","headcount_range","hq","website","linkedin","differentiator","key_customers","investors","momentum_signal","is_focal_company"]
+  // Use Claude to enrich and format them — real companies only
+  const companyList = candidates.map(c => ({
+    name: c.name,
+    description: c.description?.slice(0, 150),
+    industry: c.industry,
+    headcount: c.headcount,
+    location: c.location ? `${c.location}${c.country ? ', ' + c.country : ''}` : c.country,
+    website: c.website,
+    linkedin: c.linkedin,
+  }))
 
-- id: snake_case string
-- founded: number
-- stage: one of Pre-Seed | Seed | Series A | Series B | Series C | Series D+ | Public | Acquired | Bootstrapped
-- total_funding_usd: number
-- headcount_range: e.g. "50-200"
-- website: domain only e.g. "acme.com"
-- linkedin: slug only e.g. "company/acme"
-- momentum_signal: one of 🚀 Hypergrowth | 📈 Growing | ➡️ Stable | ⚠️ Challenged | 🔒 Stealth
-- is_focal_company: false
-- key_customers and investors: arrays of strings
+  const prompt = `Segment: "${segmentName}" in the ${sector} market (${segmentDescription})
 
-Only real companies. No duplicates. Begin with [ and end with ].`
+Enrich these real companies with VC intelligence and return as a JSON array.
+Use ONLY these companies — do not add any others.
 
-  const raw = await callHaiku(MORE_SYSTEM, prompt, 8000)
+Companies:
+${JSON.stringify(companyList, null, 1)}`
+
+  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 8000)
+
+  // ORGANIZE_SYSTEM returns segments array — flatten all companies out
   const start = raw.indexOf('[')
   const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error(`Could not parse company array. Response: ${raw.slice(0, 200)}`)
-  return JSON.parse(raw.slice(start, end + 1)) as Company[]
+  if (start === -1 || end <= start) throw new Error('Could not parse company array')
+
+  const parsed = JSON.parse(raw.slice(start, end + 1))
+
+  // Handle both formats: array of segments or array of companies directly
+  if (parsed[0]?.companies) {
+    return parsed.flatMap((seg: { companies: Company[] }) => seg.companies ?? []) as Company[]
+  }
+  return parsed as Company[]
 }
