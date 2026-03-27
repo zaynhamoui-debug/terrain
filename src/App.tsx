@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import Login     from './pages/Login'
-import Register  from './pages/Register'
-import AppPage   from './pages/App'
-import SharedMap from './pages/SharedMap'
+import Login        from './pages/Login'
+import Register     from './pages/Register'
+import AppPage      from './pages/App'
+import SharedMap    from './pages/SharedMap'
+import SegmentPage  from './pages/SegmentPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/register"   element={<Register />} />
         <Route path="/app"        element={<ProtectedRoute><AppPage /></ProtectedRoute>} />
         <Route path="/share/:id"  element={<SharedMap />} />
+        <Route path="/segment"    element={<ProtectedRoute><SegmentPage /></ProtectedRoute>} />
         <Route path="/"           element={<Navigate to="/app" replace />} />
         <Route path="*"           element={<Navigate to="/app" replace />} />
       </Routes>

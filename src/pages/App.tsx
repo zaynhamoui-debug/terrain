@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMarketMap, fetchMoreCompanies } from '../lib/claudeApi'
+import { generateMarketMap } from '../lib/claudeApi'
 import { MarketMap, Company, SavedMap } from '../types/marketMap'
 import SearchBar    from '../components/SearchBar'
 import SegmentRow   from '../components/SegmentRow'
@@ -52,8 +52,6 @@ export default function AppPage() {
   const [shareStatus,     setShareStatus]      = useState<'idle' | 'sharing' | 'copied'>('idle')
   const [showChat,        setShowChat]         = useState(false)
   const [chatInitialQ,    setChatInitialQ]     = useState<string | undefined>(undefined)
-  const [loadingMoreSegment, setLoadingMoreSegment] = useState<string | null>(null)
-  const [loadMoreErrors,     setLoadMoreErrors]     = useState<Record<string, string>>({})
   const [stageFilter,     setStageFilter]      = useState<string[]>([])
   const [headcountFilter, setHeadcountFilter]  = useState<string[]>([])
   const [hqFilter,        setHqFilter]         = useState<string[]>([])
@@ -278,37 +276,6 @@ export default function AppPage() {
     navigate('/login')
   }
 
-  async function handleLoadMore(segmentId: string) {
-    if (!currentMap) return
-    const segment = currentMap.segments.find(s => s.id === segmentId)
-    if (!segment) return
-    setLoadingMoreSegment(segmentId)
-    try {
-      const newCompanies = await fetchMoreCompanies(
-        currentMap.sector,
-        segment.name,
-        segment.description,
-        segment.companies.map(c => c.name)
-      )
-      setLoadMoreErrors(prev => { const n = { ...prev }; delete n[segmentId]; return n })
-      setCurrentMap(prev => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          segments: prev.segments.map(s =>
-            s.id === segmentId
-              ? { ...s, companies: [...s.companies, ...newCompanies] }
-              : s
-          ),
-        }
-      })
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load more companies'
-      setLoadMoreErrors(prev => ({ ...prev, [segmentId]: msg }))
-    } finally {
-      setLoadingMoreSegment(null)
-    }
-  }
 
   const visibleSegments = currentMap?.segments.filter(
     s => !activeSegment || s.id === activeSegment
@@ -741,6 +708,7 @@ export default function AppPage() {
                       <SegmentRow
                         key={segment.id}
                         segment={segment}
+                        sector={currentMap.sector}
                         onCompanyClick={setSelectedCompany}
                         watchlistIds={watchlistIds}
                         onToggleWatchlist={handleToggleWatchlist}
@@ -751,9 +719,6 @@ export default function AppPage() {
                         foundedFilter={foundedFilter}
                         investorFilter={investorFilter}
                         companySearch={companySearch}
-                        onLoadMore={() => handleLoadMore(segment.id)}
-                        isLoadingMore={loadingMoreSegment === segment.id}
-                        loadMoreError={loadMoreErrors[segment.id]}
                         dealFlowMap={dealFlowMap}
                         onAskAI={handleAskAI}
                       />

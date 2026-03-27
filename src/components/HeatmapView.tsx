@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { MarketMap, Company } from '../types/marketMap'
 
 const MOMENTUM_COLS = [
@@ -14,12 +15,14 @@ interface Props {
 }
 
 export default function HeatmapView({ map, onCompanyClick }: Props) {
+  const navigate = useNavigate()
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse min-w-[700px]">
         <thead>
           <tr>
-            <th className="text-left px-4 py-3 text-terrain-muted text-[10px] font-mono uppercase tracking-widest border-b border-terrain-border w-44">
+            <th className="text-left px-4 py-3 text-terrain-muted text-[10px] font-mono uppercase tracking-widest border-b border-terrain-border w-48">
               Segment
             </th>
             {MOMENTUM_COLS.map(col => (
@@ -34,12 +37,18 @@ export default function HeatmapView({ map, onCompanyClick }: Props) {
           {map.segments.map((seg, i) => (
             <tr key={seg.id} className={i % 2 === 0 ? '' : 'bg-white/[0.01]'}>
               <td className="px-4 py-3 align-top border-b border-terrain-border/40">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
                   <span className="text-terrain-text text-xs font-mono font-semibold leading-tight">
                     {seg.name}
                   </span>
                 </div>
+                <button
+                  onClick={() => navigate('/segment', { state: { sector: map.sector, segmentName: seg.name, segmentDescription: seg.description, segmentColor: seg.color } })}
+                  className="text-[10px] font-mono text-terrain-muted hover:text-terrain-gold transition-colors"
+                >
+                  View all →
+                </button>
               </td>
               {MOMENTUM_COLS.map(col => {
                 const companies = seg.companies.filter(c => c.momentum_signal === col.key)

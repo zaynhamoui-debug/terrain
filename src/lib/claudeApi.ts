@@ -222,6 +222,49 @@ export async function generateMarketMap(query: string): Promise<MarketMap> {
   }
 }
 
+// ─── All companies for segment detail page ───────────────────────────────────
+
+export async function searchAndEnrichSegment(
+  sector: string,
+  segmentName: string,
+  segmentDescription: string,
+): Promise<Company[]> {
+  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
+
+  const candidates = await searchClayCompanies(`${segmentName} ${sector}`, 200)
+  if (candidates.length === 0) return []
+
+  const companyList = candidates.map(c => ({
+    name: c.name,
+    description: c.description?.slice(0, 150),
+    industry: c.industry,
+    headcount: c.headcount,
+    location: c.location ? `${c.location}${c.country ? ', ' + c.country : ''}` : c.country,
+    website: c.website,
+    linkedin: c.linkedin,
+  }))
+
+  const prompt = `Segment: "${segmentName}" in the ${sector} market (${segmentDescription})
+
+Enrich these ${candidates.length} real companies and return as a flat JSON array of company objects.
+Use ONLY these companies — do not invent any others.
+
+Companies:
+${JSON.stringify(companyList, null, 1)}`
+
+  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 16000)
+  const start = raw.indexOf('[')
+  const end   = raw.lastIndexOf(']')
+  if (start === -1 || end <= start) throw new Error('Could not parse company list')
+
+  const parsed = JSON.parse(raw.slice(start, end + 1))
+  // ORGANIZE_SYSTEM may return segments or flat array
+  if (parsed[0]?.companies) {
+    return parsed.flatMap((seg: { companies: Company[] }) => seg.companies ?? []) as Company[]
+  }
+  return parsed as Company[]
+}
+
 // ─── Load more from Clay database ────────────────────────────────────────────
 
 export async function fetchMoreCompanies(

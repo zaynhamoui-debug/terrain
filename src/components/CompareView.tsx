@@ -48,7 +48,7 @@ function MapSide({ side, onSearch, onCompanyClick }: {
             <div className="text-terrain-gold text-sm font-mono mt-1">{side.map.total_market_size}</div>
           </div>
           {side.map.segments.map(seg => (
-            <SegmentRow key={seg.id} segment={seg} onCompanyClick={onCompanyClick} />
+            <SegmentRow key={seg.id} segment={seg} sector={side.map!.sector} onCompanyClick={onCompanyClick} />
           ))}
         </div>
       )}

@@ -71,7 +71,7 @@ export default function SharedMap() {
         </div>
 
         {map.segments.map(seg => (
-          <SegmentRow key={seg.id} segment={seg} onCompanyClick={setSelected} />
+          <SegmentRow key={seg.id} segment={seg} sector={map.sector} onCompanyClick={setSelected} />
         ))}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-6">
