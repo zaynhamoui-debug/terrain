@@ -5,7 +5,8 @@ import Login        from './pages/Login'
 import Register     from './pages/Register'
 import AppPage      from './pages/App'
 import SharedMap    from './pages/SharedMap'
-import SegmentPage  from './pages/SegmentPage'
+import SegmentPage    from './pages/SegmentPage'
+import TargetedPage   from './pages/TargetedPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/app"        element={<ProtectedRoute><AppPage /></ProtectedRoute>} />
         <Route path="/share/:id"  element={<SharedMap />} />
         <Route path="/segment"    element={<ProtectedRoute><SegmentPage /></ProtectedRoute>} />
+        <Route path="/targeted"   element={<ProtectedRoute><TargetedPage /></ProtectedRoute>} />
         <Route path="/"           element={<Navigate to="/app" replace />} />
         <Route path="*"           element={<Navigate to="/app" replace />} />
       </Routes>

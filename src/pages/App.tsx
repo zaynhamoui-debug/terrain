@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMarketMap } from '../lib/claudeApi'
+import { generateMarketMap, scoreCompanies } from '../lib/claudeApi'
 import { MarketMap, Company, SavedMap } from '../types/marketMap'
 import SearchBar    from '../components/SearchBar'
 import SegmentRow   from '../components/SegmentRow'
@@ -64,7 +64,11 @@ export default function AppPage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Deal flow
-  const [dealFlowMap, setDealFlowMap] = useState<Record<string, string>>({})
+  const [dealFlowMap,  setDealFlowMap]  = useState<Record<string, string>>({})
+
+  // Scores + tracking
+  const [scoresMap,    setScoresMap]    = useState<Record<string, number>>({})
+  const [trackingMap,  setTrackingMap]  = useState<Record<string, 'viewed' | 'targeted'>>({})
 
   // Rename state: mapId -> editing name
   const [renamingId,    setRenamingId]    = useState<string | null>(null)
@@ -90,6 +94,7 @@ export default function AppPage() {
     fetchWatchlist()
     fetchDealFlow()
     fetchIndustries()
+    fetchTracking()
   }, [navigate])
 
   // Rotate loading messages
@@ -137,6 +142,15 @@ export default function AppPage() {
         map[row.company_id] = row.status
       }
       setDealFlowMap(map)
+    }
+  }
+
+  async function fetchTracking() {
+    const { data } = await supabase.from('company_tracking').select('company_id, status')
+    if (data) {
+      const map: Record<string, 'viewed' | 'targeted'> = {}
+      for (const row of data as { company_id: string; status: 'viewed' | 'targeted' }[]) map[row.company_id] = row.status
+      setTrackingMap(map)
     }
   }
 
@@ -202,6 +216,10 @@ export default function AppPage() {
       const map = await generateMarketMap(query)
       setCurrentMap(map)
 
+      // Score companies in background
+      const allCompanies = map.segments.flatMap(s => s.companies)
+      scoreCompanies(allCompanies).then(scores => setScoresMap(s => ({ ...s, ...scores })))
+
       // Auto-save to Supabase
       const { data, error: saveErr } = await supabase
         .from('saved_maps')
@@ -266,6 +284,22 @@ export default function AppPage() {
     })
   }
 
+  async function handleToggleTracking(company: Company, status: 'viewed' | 'targeted') {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const existing = trackingMap[company.id]
+    if (existing === status) {
+      await supabase.from('company_tracking').delete().eq('user_id', user.id).eq('company_id', company.id)
+      setTrackingMap(prev => { const n = { ...prev }; delete n[company.id]; return n })
+    } else {
+      await supabase.from('company_tracking').upsert(
+        { user_id: user.id, company_id: company.id, company_data: company, status, sector: currentMap?.sector ?? '', updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,company_id' }
+      )
+      setTrackingMap(prev => ({ ...prev, [company.id]: status }))
+    }
+  }
+
   function handleAskAI(company: Company) {
     setChatInitialQ(`Tell me about ${company.name} — is it a promising investment?`)
     setShowChat(true)
@@ -327,6 +361,18 @@ export default function AppPage() {
           )}
 
           <div className="flex items-center gap-2">
+            {/* Targeted page link */}
+            <button
+              onClick={() => navigate('/targeted')}
+              className="flex items-center gap-1.5 text-xs font-mono border border-terrain-border text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder px-3 py-1.5 rounded transition-all duration-200"
+            >
+              <span>⊙</span>
+              <span className="hidden sm:inline">Targeted</span>
+              {Object.values(trackingMap).filter(s => s === 'targeted').length > 0 && (
+                <span className="text-terrain-gold font-bold">{Object.values(trackingMap).filter(s => s === 'targeted').length}</span>
+              )}
+            </button>
+
             {/* Pipeline — always visible */}
             <button
               onClick={() => setViewMode(v => v === 'pipeline' ? 'grid' : 'pipeline')}
@@ -721,6 +767,8 @@ export default function AppPage() {
                         companySearch={companySearch}
                         dealFlowMap={dealFlowMap}
                         onAskAI={handleAskAI}
+                        scoresMap={scoresMap}
+                        trackingMap={trackingMap}
                       />
                     ))}
                   </>
@@ -865,6 +913,9 @@ export default function AppPage() {
           dealStatus={dealFlowMap[selectedCompany.id]}
           onSetDealStatus={handleSetDealStatus}
           sector={currentMap?.sector}
+          score={scoresMap[selectedCompany.id]}
+          trackingStatus={trackingMap[selectedCompany.id]}
+          onToggleTracking={handleToggleTracking}
         />
       )}
 

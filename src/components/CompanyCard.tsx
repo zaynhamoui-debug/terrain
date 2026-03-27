@@ -21,6 +21,20 @@ const DEAL_STATUS_STYLES: Record<string, { label: string; cls: string }> = {
   passed:        { label: 'Passed',        cls: 'bg-red-950 text-red-400 border-red-800' },
 }
 
+// Score 1 = red (hue 0), Score 10 = green (hue 120)
+export function scoreToColor(score: number): string {
+  const hue = Math.round(((score - 1) / 9) * 120)
+  return `hsl(${hue}, 65%, 45%)`
+}
+
+function scoreStyle(score: number): React.CSSProperties {
+  const hue = Math.round(((score - 1) / 9) * 120)
+  return {
+    borderColor: `hsl(${hue}, 60%, 30%)`,
+    boxShadow: `0 0 0 1px hsl(${hue}, 60%, 20%), inset 0 0 20px hsl(${hue}, 60%, 5%)`,
+  }
+}
+
 interface Props {
   company: Company
   onSelect: (company: Company) => void
@@ -28,24 +42,41 @@ interface Props {
   onToggleWatchlist?: (company: Company) => void
   dealStatus?: string
   onAskAI?: (company: Company) => void
+  score?: number
+  trackingStatus?: 'viewed' | 'targeted'
 }
 
-export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist, dealStatus, onAskAI }: Props) {
+export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist, dealStatus, onAskAI, score, trackingStatus }: Props) {
   const stageClass = STAGE_STYLES[company.stage] ?? 'bg-slate-900 text-slate-400 border-slate-700'
   const momentum   = company.momentum_signal?.split(' ')[0] ?? ''
   const dealInfo   = dealStatus ? DEAL_STATUS_STYLES[dealStatus] : null
 
+  const hasScore = score !== undefined && score !== null
+  const borderStyle = hasScore && !company.is_focal_company ? scoreStyle(score) : {}
+
   return (
     <button
       onClick={() => onSelect(company)}
+      style={borderStyle}
       className={`group relative text-left w-full p-4 rounded-lg border transition-all duration-200 hover:shadow-lg ${
         company.is_focal_company
           ? 'border-terrain-gold bg-terrain-goldDim hover:border-terrain-gold/70 border-l-2'
-          : 'border-terrain-border bg-terrain-surface hover:border-terrain-subtle'
-      }`}
+          : hasScore
+            ? 'border bg-terrain-surface hover:brightness-110'
+            : 'border-terrain-border bg-terrain-surface hover:border-terrain-subtle'
+      } ${trackingStatus === 'viewed' ? 'opacity-70' : ''}`}
     >
       {/* Top-right actions */}
       <div className="absolute top-3 right-3 flex items-center gap-1.5">
+        {/* Score badge */}
+        {hasScore && (
+          <span
+            className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded"
+            style={{ color: scoreToColor(score), backgroundColor: `hsl(${Math.round(((score - 1) / 9) * 120)}, 60%, 8%)`, border: `1px solid hsl(${Math.round(((score - 1) / 9) * 120)}, 60%, 20%)` }}
+          >
+            {score}/10
+          </span>
+        )}
         {company.is_focal_company && (
           <span className="text-terrain-gold text-xs opacity-80">★ focal</span>
         )}
@@ -65,12 +96,24 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
         )}
       </div>
 
-      {/* Deal flow status badge */}
-      {dealInfo && (
-        <div className="mb-2">
-          <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${dealInfo.cls}`}>
-            {dealInfo.label}
-          </span>
+      {/* Tracking + deal flow badges row */}
+      {(dealInfo || trackingStatus) && (
+        <div className="mb-2 flex items-center gap-1.5 flex-wrap">
+          {dealInfo && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${dealInfo.cls}`}>
+              {dealInfo.label}
+            </span>
+          )}
+          {trackingStatus === 'targeted' && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded border font-mono bg-terrain-goldDim border-terrain-goldBorder text-terrain-gold">
+              ⊙ Targeted
+            </span>
+          )}
+          {trackingStatus === 'viewed' && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded border font-mono bg-terrain-surface border-terrain-border text-terrain-muted">
+              ✓ Viewed
+            </span>
+          )}
         </div>
       )}
 

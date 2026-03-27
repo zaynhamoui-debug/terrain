@@ -18,6 +18,8 @@ interface Props {
   companySearch?: string
   dealFlowMap?: Record<string, string>
   onAskAI?: (company: Company) => void
+  scoresMap?: Record<string, number>
+  trackingMap?: Record<string, 'viewed' | 'targeted'>
 }
 
 const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
@@ -29,7 +31,7 @@ const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
   '2023+':       y => y >= 2023,
 }
 
-export default function SegmentRow({ segment, sector, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, dealFlowMap, onAskAI }: Props) {
+export default function SegmentRow({ segment, sector, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, dealFlowMap, onAskAI, scoresMap, trackingMap }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const navigate = useNavigate()
 
@@ -106,6 +108,8 @@ export default function SegmentRow({ segment, sector, onCompanyClick, watchlistI
                 onToggleWatchlist={onToggleWatchlist}
                 dealStatus={dealFlowMap?.[company.id]}
                 onAskAI={onAskAI}
+                score={scoresMap?.[company.id]}
+                trackingStatus={trackingMap?.[company.id]}
               />
             ))}
           </div>

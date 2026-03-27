@@ -265,6 +265,50 @@ ${JSON.stringify(companyList, null, 1)}`
   return parsed as Company[]
 }
 
+// ─── AI Investment Scoring ────────────────────────────────────────────────────
+
+const SCORE_SYSTEM = `You are an expert early-stage venture capital investor. Score each company as an investment opportunity from 1-10.
+
+Scoring:
+- 9-10: Exceptional (rare). Clear differentiation, strong momentum, right stage
+- 7-8: Strong. Good momentum, solid moat, early-stage appropriate
+- 4-6: Average. Mixed signals or unclear differentiation
+- 1-3: Poor. Challenged/stealth with no differentiation, or declining signals
+
+Favor Pre-Seed/Seed/Series A companies with 🚀 or 📈 momentum signals.
+Penalize ⚠️ Challenged momentum or very generic descriptions.
+
+Return ONLY a valid JSON object: { "company_id": score_integer, ... }. No markdown, no explanation.`
+
+export async function scoreCompanies(companies: Company[]): Promise<Record<string, number>> {
+  if (!API_KEY || companies.length === 0) return {}
+  const BATCH = 30
+  const results: Record<string, number> = {}
+  const chunks: Company[][] = []
+  for (let i = 0; i < companies.length; i += BATCH) chunks.push(companies.slice(i, i + BATCH))
+
+  await Promise.all(chunks.map(async chunk => {
+    const list = chunk.map(c => ({
+      id: c.id,
+      name: c.name,
+      tagline: c.tagline?.slice(0, 80),
+      stage: c.stage,
+      headcount: c.headcount_range,
+      funding: c.funding_display,
+      momentum: c.momentum_signal,
+      differentiator: c.differentiator?.slice(0, 80),
+      founded: c.founded,
+    }))
+    try {
+      const raw = await callHaiku(SCORE_SYSTEM, JSON.stringify(list), 800)
+      const s = raw.indexOf('{'); const e = raw.lastIndexOf('}')
+      if (s !== -1 && e > s) Object.assign(results, JSON.parse(raw.slice(s, e + 1)))
+    } catch { /* silently ignore scoring errors */ }
+  }))
+
+  return results
+}
+
 // ─── Load more from Clay database ────────────────────────────────────────────
 
 export async function fetchMoreCompanies(

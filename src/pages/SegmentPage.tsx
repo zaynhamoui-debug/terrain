@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Company } from '../types/marketMap'
-import { searchAndEnrichSegment } from '../lib/claudeApi'
+import { searchAndEnrichSegment, scoreCompanies } from '../lib/claudeApi'
 import CompanyCard from '../components/CompanyCard'
 import CompanyModal from '../components/CompanyModal'
 import { supabase } from '../lib/supabase'
@@ -19,19 +19,22 @@ export default function SegmentPage() {
   const navigate   = useNavigate()
   const state      = location.state as SegmentState | null
 
-  const [companies,      setCompanies]      = useState<Company[]>([])
-  const [loading,        setLoading]        = useState(true)
-  const [error,          setError]          = useState<string | null>(null)
+  const [companies,       setCompanies]       = useState<Company[]>([])
+  const [loading,         setLoading]         = useState(true)
+  const [error,           setError]           = useState<string | null>(null)
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
-  const [watchlistIds,   setWatchlistIds]   = useState<Set<string>>(new Set())
-  const [dealFlowMap,    setDealFlowMap]    = useState<Record<string, string>>({})
-  const [search,         setSearch]         = useState('')
+  const [watchlistIds,    setWatchlistIds]    = useState<Set<string>>(new Set())
+  const [dealFlowMap,     setDealFlowMap]     = useState<Record<string, string>>({})
+  const [scoresMap,       setScoresMap]       = useState<Record<string, number>>({})
+  const [trackingMap,     setTrackingMap]     = useState<Record<string, 'viewed' | 'targeted'>>({})
+  const [search,          setSearch]          = useState('')
 
   useEffect(() => {
     if (!state) { navigate('/app'); return }
     load()
     fetchWatchlist()
     fetchDealFlow()
+    fetchTracking()
   }, [])
 
   async function load() {
@@ -41,6 +44,8 @@ export default function SegmentPage() {
     try {
       const result = await searchAndEnrichSegment(state.sector, state.segmentName, state.segmentDescription)
       setCompanies(result)
+      // Score in background
+      scoreCompanies(result).then(scores => setScoresMap(scores))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load companies')
     } finally {
@@ -62,6 +67,15 @@ export default function SegmentPage() {
     }
   }
 
+  async function fetchTracking() {
+    const { data } = await supabase.from('company_tracking').select('company_id, status')
+    if (data) {
+      const map: Record<string, 'viewed' | 'targeted'> = {}
+      for (const row of data as { company_id: string; status: 'viewed' | 'targeted' }[]) map[row.company_id] = row.status
+      setTrackingMap(map)
+    }
+  }
+
   async function handleToggleWatchlist(company: Company) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -74,6 +88,23 @@ export default function SegmentPage() {
     }
   }
 
+  async function handleToggleTracking(company: Company, status: 'viewed' | 'targeted') {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const existing = trackingMap[company.id]
+    if (existing === status) {
+      // toggle off
+      await supabase.from('company_tracking').delete().eq('user_id', user.id).eq('company_id', company.id)
+      setTrackingMap(prev => { const n = { ...prev }; delete n[company.id]; return n })
+    } else {
+      await supabase.from('company_tracking').upsert(
+        { user_id: user.id, company_id: company.id, company_data: company, status, sector: state?.sector ?? '', updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,company_id' }
+      )
+      setTrackingMap(prev => ({ ...prev, [company.id]: status }))
+    }
+  }
+
   const filtered = companies.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.tagline?.toLowerCase().includes(search.toLowerCase())
   )
@@ -82,7 +113,6 @@ export default function SegmentPage() {
 
   return (
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
-      {/* Header */}
       <header className="sticky top-0 z-20 border-b border-terrain-border bg-terrain-bg/90 backdrop-blur px-6 py-4 flex items-center gap-4">
         <button
           onClick={() => navigate(-1)}
@@ -105,7 +135,6 @@ export default function SegmentPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Search */}
         {!loading && companies.length > 0 && (
           <div className="mb-6">
             <input
@@ -118,7 +147,6 @@ export default function SegmentPage() {
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 gap-6">
             <div className="relative">
@@ -129,7 +157,6 @@ export default function SegmentPage() {
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
             <p className="text-red-400 text-sm font-mono">{error}</p>
@@ -139,7 +166,6 @@ export default function SegmentPage() {
           </div>
         )}
 
-        {/* Empty */}
         {!loading && !error && companies.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="text-terrain-muted text-4xl mb-4">⬡</div>
@@ -147,7 +173,6 @@ export default function SegmentPage() {
           </div>
         )}
 
-        {/* Grid */}
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map(company => (
@@ -158,6 +183,8 @@ export default function SegmentPage() {
                 isWatchlisted={watchlistIds.has(company.id)}
                 onToggleWatchlist={handleToggleWatchlist}
                 dealStatus={dealFlowMap[company.id]}
+                score={scoresMap[company.id]}
+                trackingStatus={trackingMap[company.id]}
               />
             ))}
           </div>
@@ -175,6 +202,9 @@ export default function SegmentPage() {
           mapId={null}
           onClose={() => setSelectedCompany(null)}
           onSetDealStatus={() => {}}
+          score={scoresMap[selectedCompany.id]}
+          trackingStatus={trackingMap[selectedCompany.id]}
+          onToggleTracking={handleToggleTracking}
         />
       )}
     </div>
