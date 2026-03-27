@@ -62,6 +62,7 @@ export default function AppPage() {
   const [investorFilter,  setInvestorFilter]   = useState<string[]>([])
   const [companySearch,   setCompanySearch]    = useState('')
   const [showFilters,     setShowFilters]      = useState(false)
+  const [dbIndustries,    setDbIndustries]     = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Deal flow
@@ -90,6 +91,7 @@ export default function AppPage() {
     fetchSavedMaps()
     fetchWatchlist()
     fetchDealFlow()
+    fetchIndustries()
   }, [navigate])
 
   // Rotate loading messages
@@ -137,6 +139,18 @@ export default function AppPage() {
         map[row.company_id] = row.status
       }
       setDealFlowMap(map)
+    }
+  }
+
+  async function fetchIndustries() {
+    const { data } = await supabase
+      .from('clay_companies')
+      .select('industry')
+      .not('industry', 'is', null)
+      .limit(5000)
+    if (data) {
+      const unique = Array.from(new Set(data.map((r: { industry: string }) => r.industry))).sort() as string[]
+      setDbIndustries(unique)
     }
   }
 
@@ -480,7 +494,7 @@ export default function AppPage() {
                   </div>
                 </>
               )}
-              <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+              <SearchBar onSearch={handleSearch} isLoading={isLoading} industries={dbIndustries} />
             </div>
 
             {/* Loading state */}

@@ -1,17 +1,12 @@
 import { useState, FormEvent } from 'react'
 
-const EXAMPLE_SECTORS = [
-  'AI infrastructure', 'Climate tech', 'Developer tools',
-  'B2B payments', 'Defence tech', 'Healthcare AI',
-  'Vertical SaaS', 'Web3 infrastructure',
-]
-
 interface Props {
   onSearch: (query: string) => void
   isLoading: boolean
+  industries?: string[]
 }
 
-export default function SearchBar({ onSearch, isLoading }: Props) {
+export default function SearchBar({ onSearch, isLoading, industries = [] }: Props) {
   const [query, setQuery] = useState('')
 
   function handleSubmit(e: FormEvent) {
@@ -20,10 +15,10 @@ export default function SearchBar({ onSearch, isLoading }: Props) {
     if (q && !isLoading) onSearch(q)
   }
 
-  function handleChip(sector: string) {
+  function handleChip(industry: string) {
     if (isLoading) return
-    setQuery(sector)
-    onSearch(sector)
+    setQuery(industry)
+    onSearch(industry)
   }
 
   return (
@@ -46,18 +41,25 @@ export default function SearchBar({ onSearch, isLoading }: Props) {
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-2 mt-4">
-        {EXAMPLE_SECTORS.map(sector => (
-          <button
-            key={sector}
-            onClick={() => handleChip(sector)}
-            disabled={isLoading}
-            className="text-xs text-terrain-muted border border-terrain-border px-3 py-1.5 rounded hover:border-terrain-subtle hover:text-terrain-text transition-colors disabled:opacity-40 font-mono"
-          >
-            {sector}
-          </button>
-        ))}
-      </div>
+      {industries.length > 0 && (
+        <div className="mt-4">
+          <p className="text-terrain-muted text-[10px] font-mono uppercase tracking-widest mb-2">
+            Industries in database
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {industries.map(industry => (
+              <button
+                key={industry}
+                onClick={() => handleChip(industry)}
+                disabled={isLoading}
+                className="text-[11px] text-terrain-muted border border-terrain-border px-3 py-1 rounded hover:border-terrain-goldBorder hover:text-terrain-gold transition-colors disabled:opacity-40 font-mono"
+              >
+                {industry}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
