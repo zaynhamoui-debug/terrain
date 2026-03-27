@@ -50,7 +50,7 @@ async function callHaiku(system: string, user: string, maxTokens: number): Promi
 
 // ─── Search real companies from Clay database ─────────────────────────────────
 
-async function searchClayCompanies(query: string, limit = 80, excludeNames: string[] = []): Promise<ClayCompany[]> {
+async function searchClayCompanies(query: string, limit = 40, excludeNames: string[] = []): Promise<ClayCompany[]> {
   const select = 'name, description, industry, headcount, location, country, website, linkedin'
 
   // Full-text search first
@@ -153,14 +153,37 @@ Rules:
 - Group into 3-5 thematic segments based on the query
 - Return ONLY the raw JSON array`
 
+// Safely parse a JSON array, tolerating trailing truncation
+function parseJsonArray(raw: string): unknown[] {
+  const start = raw.indexOf('[')
+  const end   = raw.lastIndexOf(']')
+  if (start === -1) throw new Error('No JSON array found in response')
+  if (end > start) {
+    try { return JSON.parse(raw.slice(start, end + 1)) } catch { /* fall through to repair */ }
+  }
+  // Try to recover by finding the last complete object
+  const fragment = raw.slice(start)
+  let depth = 0; let lastClose = -1
+  for (let i = 0; i < fragment.length; i++) {
+    if (fragment[i] === '{') depth++
+    else if (fragment[i] === '}') { depth--; if (depth === 0) lastClose = i }
+  }
+  if (lastClose === -1) throw new Error('Could not recover JSON from response')
+  try { return JSON.parse(fragment.slice(0, lastClose + 1) + ']') } catch {
+    throw new Error('Could not parse JSON even after repair attempt')
+  }
+}
+
 async function organizeRealCompanies(
   query: string,
   sector: string,
   companies: ClayCompany[],
 ): Promise<{ id: string; name: string; companies: Company[] }[]> {
-  const companyList = companies.map(c => ({
+  // Limit to 30 companies — keeps output well within token budget and fast
+  const batch = companies.slice(0, 30)
+  const companyList = batch.map(c => ({
     name: c.name,
-    description: c.description?.slice(0, 150),
+    description: c.description?.slice(0, 100),
     industry: c.industry,
     headcount: c.headcount,
     location: c.location ? `${c.location}${c.country ? ', ' + c.country : ''}` : c.country,
@@ -170,16 +193,13 @@ async function organizeRealCompanies(
 
   const prompt = `Query: "${query}" | Sector: ${sector}
 
-Organize these ${companies.length} real companies into 3-5 market segments relevant to the query.
+Organize these ${batch.length} real companies into 3-5 market segments relevant to the query.
 
 Companies:
 ${JSON.stringify(companyList, null, 1)}`
 
-  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 12000)
-  const start = raw.indexOf('[')
-  const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error('Could not parse organized segments')
-  return JSON.parse(raw.slice(start, end + 1))
+  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 5000)
+  return parseJsonArray(raw) as { id: string; name: string; companies: Company[] }[]
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -224,19 +244,15 @@ export async function generateMarketMap(query: string): Promise<MarketMap> {
 
 // ─── All companies for segment detail page ───────────────────────────────────
 
-export async function searchAndEnrichSegment(
-  sector: string,
+async function enrichBatch(
   segmentName: string,
+  sector: string,
   segmentDescription: string,
+  batch: ClayCompany[],
 ): Promise<Company[]> {
-  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
-
-  const candidates = await searchClayCompanies(`${segmentName} ${sector}`, 200)
-  if (candidates.length === 0) return []
-
-  const companyList = candidates.map(c => ({
+  const companyList = batch.map(c => ({
     name: c.name,
-    description: c.description?.slice(0, 150),
+    description: c.description?.slice(0, 100),
     industry: c.industry,
     headcount: c.headcount,
     location: c.location ? `${c.location}${c.country ? ', ' + c.country : ''}` : c.country,
@@ -246,23 +262,41 @@ export async function searchAndEnrichSegment(
 
   const prompt = `Segment: "${segmentName}" in the ${sector} market (${segmentDescription})
 
-Enrich these ${candidates.length} real companies and return as a flat JSON array of company objects.
+Enrich these ${batch.length} real companies and return as a flat JSON array of company objects.
 Use ONLY these companies — do not invent any others.
 
 Companies:
 ${JSON.stringify(companyList, null, 1)}`
 
-  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 16000)
-  const start = raw.indexOf('[')
-  const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error('Could not parse company list')
-
-  const parsed = JSON.parse(raw.slice(start, end + 1))
-  // ORGANIZE_SYSTEM may return segments or flat array
-  if (parsed[0]?.companies) {
-    return parsed.flatMap((seg: { companies: Company[] }) => seg.companies ?? []) as Company[]
+  const raw = await callHaiku(ORGANIZE_SYSTEM, prompt, 5000)
+  const parsed = parseJsonArray(raw)
+  if (parsed[0] && typeof parsed[0] === 'object' && 'companies' in (parsed[0] as object)) {
+    return (parsed as { companies: Company[] }[]).flatMap(seg => seg.companies ?? [])
   }
   return parsed as Company[]
+}
+
+export async function searchAndEnrichSegment(
+  sector: string,
+  segmentName: string,
+  segmentDescription: string,
+): Promise<Company[]> {
+  if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
+
+  // Fetch up to 75 real companies from Clay DB
+  const candidates = await searchClayCompanies(`${segmentName} ${sector}`, 75)
+  if (candidates.length === 0) return []
+
+  // Process in parallel batches of 25 — each batch fits well within token budget
+  const BATCH = 25
+  const batches: ClayCompany[][] = []
+  for (let i = 0; i < candidates.length; i += BATCH) batches.push(candidates.slice(i, i + BATCH))
+
+  const results = await Promise.all(
+    batches.map(batch => enrichBatch(segmentName, sector, segmentDescription, batch).catch(() => [] as Company[]))
+  )
+
+  return results.flat()
 }
 
 // ─── AI Investment Scoring ────────────────────────────────────────────────────
