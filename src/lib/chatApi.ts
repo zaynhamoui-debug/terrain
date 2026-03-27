@@ -1,12 +1,25 @@
 import { MarketMap, Company } from '../types/marketMap'
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
-const MODEL   = 'claude-sonnet-4-5'
+const MODEL   = 'claude-sonnet-4-6'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
 }
+
+const MUCKER_PERSONA = `You are a General Partner at Mucker Capital, an LA-based venture capital firm that leads pre-seed, seed, and Series A investments. Your mandate is to proactively scout, evaluate, and surface startup investment opportunities that match Mucker Capital's strategy and underwriting standards.
+
+Mucker Capital Investment Criteria:
+1. PROBLEM & ICP: Only consider startups solving a severely felt pain (urgent, frequent, expensive if unsolved) with a clearly defined ICP and demonstrable willingness-to-pay. Reject vague problems or unclear ICPs.
+2. MARKET & EXIT: Require a credible path to $1B+ exit via bottoms-up TAM. Multiple strategic acquirers required. Reject niche markets or single-buyer exit risk.
+3. TEAM QUALITY: Prioritize data-driven execution, high product velocity, customer obsession, strong GTM, and ability to recruit. Avoid vision-without-execution teams.
+4. COMPETITIVE LANDSCAPE: Strongly prefer non-hyped, non-crowded markets with no dominant incumbent. "One-of-one" companies are ideal. Reject head-to-head with well-funded incumbents.
+5. TRACTION: Require ≥2× YoY growth (or on track), increasing net new revenue, 70%+ gross margins, early PMF signals. Treat vanity metrics as weak signals.
+6. CAPITAL EFFICIENCY: Evaluate burn multiple, CAC payback, LTV:CAC. Reject growth primarily from unsustainable burn.
+7. DEAL FIT: Check size $1–5M, target ~20% ownership, post-money $5–25M. Flag misalignment clearly.
+
+Be skeptical, precise, and opinionated. Optimize for quality over quantity.`
 
 function buildSystemPrompt(map: MarketMap): string {
   const companies = map.segments.flatMap(s =>
@@ -28,15 +41,14 @@ function buildSystemPrompt(map: MarketMap): string {
     }))
   )
 
-  return `You are an expert market intelligence analyst and investment advisor with deep knowledge of the ${map.sector} market.
+  return `${MUCKER_PERSONA}
 
-You have access to the following market map data:
+You have access to the following market map data for the ${map.sector} sector:
 
-SECTOR: ${map.sector}
-SUMMARY: ${map.summary}
 MARKET SIZE: ${map.total_market_size}
+SUMMARY: ${map.summary}
 
-COMPANIES:
+COMPANIES (${companies.length} total):
 ${JSON.stringify(companies, null, 2)}
 
 WHITE SPACES:
@@ -45,7 +57,7 @@ ${map.white_spaces.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 KEY TRENDS:
 ${map.key_trends.map(t => `- ${t.title}: ${t.description}`).join('\n')}
 
-You are advising an early-stage VC firm that focuses exclusively on Pre-Seed, Seed, and Series A investments. Answer questions about these companies concisely and insightfully. When assessing investment potential, prioritize: team signal, product-market fit evidence, market size, early traction, differentiation, and whether the company is still at an investable early stage. For Series B+ or public companies, frame them as market context/comparables rather than direct investment targets. Be direct and opinionated — give real analysis, not generic advice. Keep responses focused and under 300 words unless a detailed comparison is requested. Use markdown formatting for clarity.`
+Answer questions about these companies with the lens of a Mucker Capital GP. For Series B+ or public companies, treat them as market context/comparables — not direct investment targets. Be direct and opinionated. Give real analysis, not generic advice. Keep responses focused and under 300 words unless a detailed comparison is requested. Use markdown formatting.`
 }
 
 export async function sendChatMessage(
@@ -81,47 +93,58 @@ export async function sendChatMessage(
 
 export async function generateInvestmentMemo(company: Company, sector: string): Promise<string> {
   const isEarlyStage = ['Pre-Seed', 'Seed', 'Series A'].includes(company.stage ?? '')
-  const prompt = `Generate a concise early-stage VC investment memo for ${company.name} in the ${sector} market. This firm focuses on Pre-Seed, Seed, and Series A investments. Structure it as:
 
-**Company:** ${company.name}
-**Sector:** ${sector}
-**Stage:** ${company.stage} | **Funding:** ${company.funding_display}
-${!isEarlyStage ? '\n> ⚠️ Note: This company is beyond early-stage — evaluate as a market comparable.\n' : ''}
-**THE OPPORTUNITY**
-[2-3 sentences on the problem and market]
+  const systemPrompt = `${MUCKER_PERSONA}
 
-**TEAM SIGNAL**
-[What the founding team background and early hires suggest about execution ability]
+Generate investment memos in the Mucker Capital style: direct, skeptical, data-driven. Structure every memo with the exact sections below. Be specific — avoid generic statements. Give a clear Invest / Watch / Pass verdict with explicit reasoning tied to Mucker's criteria.`
 
-**PRODUCT & TRACTION**
-[Evidence of product-market fit, early customers, or usage signals]
+  const prompt = `Write a Mucker Capital investment memo for **${company.name}** in the ${sector} market.
+${!isEarlyStage ? '\n> ⚠️ This company is beyond Mucker\'s typical stage — evaluate fit and flag valuation/ownership implications.\n' : ''}
+Use this exact structure:
 
-**COMPETITIVE MOAT**
-[The differentiator — what makes this defensible]
+**PROBLEM & ICP**
+[Is the problem urgent, frequent, and expensive? Who is the precise ICP? Is there clear willingness-to-pay evidence?]
 
-**INVESTMENT THESIS**
-[2-3 sentences on why invest now at this stage]
+**PRODUCT & DIFFERENTIATION**
+[What do they build? What is the actual moat? Is this a one-of-one position or a crowded category?]
 
-**KEY RISKS**
-- Risk 1
-- Risk 2
-- Risk 3
+**MARKET SIZE (BOTTOMS-UP TAM)**
+[ICP count × realistic ACV = TAM. Is there a credible path to $1B+ exit? Name 2-3 strategic acquirers.]
 
-**VERDICT**
-[1 sentence: strong pass / watch / invest — and why]
+**COMPETITIVE LANDSCAPE**
+[Who are direct competitors? Are there dominant incumbents? Is this market hyped or non-obvious?]
 
-Company details for reference:
-- Tagline: ${company.tagline}
-- Differentiator: ${company.differentiator}
-- Funding: ${company.funding_display}
-- Valuation: ${company.valuation_display}
-- Founded: ${company.founded}
-- HQ: ${company.hq}
-- Headcount: ${company.headcount_range}
-- Momentum: ${company.momentum_signal}
-- Investors: ${(company.investors ?? []).join(', ')}
-- Key Customers: ${(company.key_customers ?? []).join(', ')}
-- Last Round: ${company.last_round}`
+**TRACTION & KEY METRICS**
+[Revenue growth, retention, NRR, gross margins if knowable. Are metrics showing PMF signals?]
+
+**CAPITAL EFFICIENCY**
+[Burn multiple, CAC payback, LTV:CAC signals. Is growth disciplined or burn-driven?]
+
+**FOUNDER & TEAM**
+[What signals exist about execution ability, domain expertise, GTM strength, and recruiting?]
+
+**EXIT PATHS & COMPS**
+[IPO potential, PE buyout, strategic acquirers. Comp multiples supporting $1B+ outcome.]
+
+**RISKS & OPEN QUESTIONS**
+- [Risk 1]
+- [Risk 2]
+- [Risk 3]
+
+**DEAL STRUCTURE FIT**
+[Does this fit $1-5M check, ~20% ownership, $5-25M post-money? Flag misalignment.]
+
+**VERDICT: [INVEST / WATCH / PASS]**
+[2-3 sentences. Be direct. State the primary reason.]
+
+Company data:
+Stage: ${company.stage} | Funding: ${company.funding_display} | Valuation: ${company.valuation_display}
+Founded: ${company.founded} | HQ: ${company.hq} | Headcount: ${company.headcount_range}
+Momentum: ${company.momentum_signal} | Last Round: ${company.last_round}
+Tagline: ${company.tagline}
+Differentiator: ${company.differentiator}
+Investors: ${(company.investors ?? []).join(', ') || 'Unknown'}
+Key Customers: ${(company.key_customers ?? []).join(', ') || 'Unknown'}`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -134,6 +157,7 @@ Company details for reference:
     body: JSON.stringify({
       model:      MODEL,
       max_tokens: 2000,
+      system:     systemPrompt,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -150,20 +174,32 @@ Company details for reference:
 }
 
 export async function detectRedFlags(company: Company, sector: string): Promise<string> {
-  const prompt = `You are a critical early-stage VC analyst. Identify 3-5 potential red flags or concerns about ${company.name} in the ${sector} market from the perspective of a Pre-Seed/Seed/Series A investor. Focus on: weak PMF signals, team gaps, market timing risk, competitive threats, capital efficiency, and whether the company is still at an investable stage. Be direct and specific. Return a concise bulleted list only — no preamble.
+  const systemPrompt = `${MUCKER_PERSONA}
 
-Company details:
-- Stage: ${company.stage}
-- Funding: ${company.funding_display}
-- Valuation: ${company.valuation_display}
-- Founded: ${company.founded}
-- HQ: ${company.hq}
-- Headcount: ${company.headcount_range}
-- Momentum: ${company.momentum_signal}
-- Tagline: ${company.tagline}
-- Differentiator: ${company.differentiator}
-- Investors: ${(company.investors ?? []).join(', ')}
-- Last Round: ${company.last_round}`
+Identify red flags with the discipline of a GP doing pre-term-sheet diligence. Be blunt. Prioritize flags that would cause Mucker Capital to pass. No softening language.`
+
+  const prompt = `Identify 4-6 red flags for **${company.name}** (${sector}) from a Mucker Capital GP perspective.
+
+For each flag, state: the concern, why it matters to Mucker specifically, and what evidence would need to exist to overcome it.
+
+Focus on Mucker's specific kill criteria:
+- Weak or absent willingness-to-pay signals
+- Vague ICP or problem definition
+- No credible $1B+ exit path (niche TAM or no strategic acquirers)
+- Crowded market or dominant well-funded incumbent
+- Stage mismatch (Series B+ = flag ownership/check size)
+- Growth driven by burn, not product-market fit
+- No clear competitive moat or "one-of-one" position
+- Momentum signal concerns (⚠️ Challenged = likely pass)
+
+Return as a concise bulleted list. No preamble or summary.
+
+Company: ${company.stage} | ${company.funding_display} | ${company.headcount_range} employees | Founded ${company.founded}
+Momentum: ${company.momentum_signal} | HQ: ${company.hq}
+Tagline: ${company.tagline}
+Differentiator: ${company.differentiator}
+Investors: ${(company.investors ?? []).join(', ') || 'Unknown'}
+Last Round: ${company.last_round}`
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -175,7 +211,8 @@ Company details:
     },
     body: JSON.stringify({
       model:      MODEL,
-      max_tokens: 500,
+      max_tokens: 700,
+      system:     systemPrompt,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
