@@ -72,12 +72,12 @@ async function run() {
   let inserted = 0
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase.from('clay_companies').insert(batch)
+    const { error } = await supabase.from('clay_companies').upsert(batch, { onConflict: 'name', ignoreDuplicates: true })
     if (error) {
       console.error(`Batch ${i}–${i + BATCH_SIZE} failed:`, error.message)
     } else {
       inserted += batch.length
-      process.stdout.write(`\r${inserted}/${rows.length} inserted…`)
+      process.stdout.write(`\r${inserted}/${rows.length} processed…`)
     }
   }
 
