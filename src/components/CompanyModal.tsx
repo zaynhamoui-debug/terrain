@@ -89,18 +89,27 @@ function parseHeadcount(range: string): number {
   if (!range) return 10
   const m = range.match(/(\d[\d,]*)\s*[-–]\s*(\d[\d,]*)/)
   if (m) return Math.round((parseInt(m[1].replace(/,/g, '')) + parseInt(m[2].replace(/,/g, ''))) / 2)
-  const s = parseInt(range.replace(/,/g, ''))
-  return isNaN(s) ? 10 : s
+  // Handle formats like "51-200 employees" or "1,001-5,000"
+  const m2 = range.match(/(\d[\d,]+)/)
+  if (m2) return parseInt(m2[1].replace(/,/g, ''))
+  return 10
 }
 
 function buildGrowthData(company: Company) {
   const current = parseHeadcount(company.headcount_range)
-  const founded = company.founded || 2020
+  // Estimate founding year from stage if missing
+  const stageYearGuess: Record<string, number> = {
+    'Pre-Seed': 2023, 'Seed': 2021, 'Series A': 2019,
+    'Series B': 2017, 'Series C': 2015, 'Series D+': 2013,
+    'Public': 2010, 'Acquired': 2015, 'Bootstrapped': 2018,
+  }
+  const founded = (company.founded && company.founded > 1990)
+    ? company.founded
+    : (stageYearGuess[company.stage] ?? 2020)
   const now = 2025
   const years = Math.max(1, now - founded)
   return Array.from({ length: years + 1 }, (_, i) => {
     const t = i / years
-    // exponential curve: 3 → current headcount
     const employees = Math.max(1, Math.round(3 * Math.pow(Math.max(current, 4) / 3, t)))
     return { year: founded + i, employees }
   })
@@ -414,7 +423,7 @@ export default function CompanyModal({
           )}
 
           {/* Headcount Growth Chart */}
-          {company.headcount_range && company.founded && (
+          {(company.headcount_range || company.headcount_range === '0') && (
             <div className="border border-terrain-border rounded-lg p-4 bg-terrain-bg">
               <HeadcountChart company={company} />
             </div>
