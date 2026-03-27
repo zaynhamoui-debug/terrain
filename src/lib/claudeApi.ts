@@ -299,20 +299,31 @@ export async function searchAndEnrichSegment(
   return results.flat()
 }
 
-// ─── AI Investment Scoring ────────────────────────────────────────────────────
+// ─── AI Investment Scoring (Mucker Capital Framework) ────────────────────────
 
-const SCORE_SYSTEM = `You are an expert early-stage venture capital investor. Score each company as an investment opportunity from 1-10.
+const SCORE_SYSTEM = `You are a General Partner at Mucker Capital, an LA-based VC firm that leads pre-seed, seed, and Series A investments. Score each company 1-10 as a Mucker Capital investment opportunity.
 
-Scoring:
-- 9-10: Exceptional (rare). Clear differentiation, strong momentum, right stage
-- 7-8: Strong. Good momentum, solid moat, early-stage appropriate
-- 4-6: Average. Mixed signals or unclear differentiation
-- 1-3: Poor. Challenged/stealth with no differentiation, or declining signals
+Scoring scale:
+- 9-10: Exceptional. Would likely lead this round. ($1B+ exit credible, one-of-one market position, strong PMF signals)
+- 7-8: Strong interest. Would want to meet. (Clear differentiation, right stage, compelling problem/ICP)
+- 5-6: Watch list. Needs more data. (Some signals but uncertain market size or traction)
+- 3-4: Weak fit. Pass unless new info. (Crowded market, vague ICP, unclear differentiation)
+- 1-2: Clear pass. (Late stage, commoditized problem, ⚠️ Challenged with no moat)
 
-Favor Pre-Seed/Seed/Series A companies with 🚀 or 📈 momentum signals.
-Penalize ⚠️ Challenged momentum or very generic descriptions.
+Evaluate each company on:
+1. Problem severity: Urgent, frequent, expensive to leave unsolved? Clear ICP?
+2. Market & exit: Credible path to $1B+ exit? Multiple strategic acquirers? Non-niche TAM?
+3. Competitive position: Non-hyped, non-crowded market? No dominant incumbent? "One-of-one" company?
+4. Traction signals: ≥2× YoY growth? Retention? NRR? Or early PMF signals?
+5. Stage fit: Pre-Seed/Seed/Series A strongly preferred. Flag Series B+ negatively. Target $5-25M post-money.
+6. Capital efficiency: Disciplined unit economics? Not growth-by-burn?
 
-Return ONLY a valid JSON object: { "company_id": score_integer, ... }. No markdown, no explanation.`
+Penalize: Series B+ stage, crowded SaaS, ⚠️ Challenged momentum, generic "AI for X" with no moat.
+Favor: B2B SaaS, fintech, marketplace, non-obvious sectors, 📈 Growing or 🚀 Hypergrowth momentum, small teams with strong early signals.
+
+IMPORTANT: Return ONLY a JSON object where keys are the numeric index "i" and values are integer scores.
+Example: {"0": 7, "1": 4, "2": 9}
+No explanation, no markdown, no other text.`
 
 export async function scoreCompanies(companies: Company[]): Promise<Record<string, number>> {
   if (!API_KEY || companies.length === 0) return {}
@@ -321,9 +332,10 @@ export async function scoreCompanies(companies: Company[]): Promise<Record<strin
   const chunks: Company[][] = []
   for (let i = 0; i < companies.length; i += BATCH) chunks.push(companies.slice(i, i + BATCH))
 
-  await Promise.all(chunks.map(async chunk => {
-    const list = chunk.map(c => ({
-      id: c.id,
+  await Promise.all(chunks.map(async (chunk, chunkIdx) => {
+    // Use numeric index as key — far more reliable than string IDs which Claude may mangle
+    const list = chunk.map((c, i) => ({
+      i,
       name: c.name,
       tagline: c.tagline?.slice(0, 80),
       stage: c.stage,
@@ -336,8 +348,18 @@ export async function scoreCompanies(companies: Company[]): Promise<Record<strin
     try {
       const raw = await callHaiku(SCORE_SYSTEM, JSON.stringify(list), 800)
       const s = raw.indexOf('{'); const e = raw.lastIndexOf('}')
-      if (s !== -1 && e > s) Object.assign(results, JSON.parse(raw.slice(s, e + 1)))
-    } catch { /* silently ignore scoring errors */ }
+      if (s === -1 || e <= s) return
+      const parsed: Record<string, number> = JSON.parse(raw.slice(s, e + 1))
+      // Map numeric index back to company ID
+      for (const [key, score] of Object.entries(parsed)) {
+        const idx = parseInt(key)
+        const company = chunk[idx]
+        if (!isNaN(idx) && company && typeof score === 'number') {
+          results[company.id] = score
+        }
+      }
+    } catch { /* silently ignore */ }
+    void chunkIdx
   }))
 
   return results
