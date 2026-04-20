@@ -4,6 +4,7 @@ import {
   RATING_LABELS, PASS_TAGS, POSITIVE_TAGS,
 } from '../lib/dailyRecs'
 import { STAGE_STYLES } from './CompanyCard'
+import type { Recommendation } from '../lib/prospecting/scoring'
 
 interface Props {
   company:    RecCompany
@@ -18,27 +19,44 @@ const RATING_STYLES: Record<FeedbackRating, { active: string; hover: string; lab
   3: { active: 'bg-emerald-950 border-emerald-700 text-emerald-400', hover: 'hover:border-emerald-700 hover:text-emerald-400 hover:bg-emerald-950/40', label: 'Strong Yes' },
 }
 
+const REC_BADGE: Record<Recommendation, { label: string; cls: string }> = {
+  strong_pick: { label: 'Strong Pick', cls: 'bg-emerald-950 border-emerald-700 text-emerald-400' },
+  pick:        { label: 'Pick',        cls: 'bg-blue-950   border-blue-700   text-blue-400'   },
+  watch:       { label: 'Watch',       cls: 'bg-slate-800  border-slate-600  text-slate-400'  },
+  pass:        { label: 'Low Signal',  cls: 'bg-red-950    border-red-900    text-red-500'    },
+}
+
+function ScorePill({ label, value }: { label: string; value: number }) {
+  const color = value >= 70 ? 'text-emerald-400' : value >= 50 ? 'text-terrain-gold' : 'text-red-400'
+  return (
+    <div className="flex flex-col items-center rounded bg-terrain-bg border border-terrain-border px-2.5 py-1.5 min-w-[48px]">
+      <span className={`text-base font-bold font-mono ${color}`}>{value}</span>
+      <span className="text-[9px] font-mono text-terrain-muted uppercase tracking-widest">{label}</span>
+    </div>
+  )
+}
+
 export default function RecCompanyCard({ company, feedback, onFeedback }: Props) {
   const stageClass = STAGE_STYLES[company.stage] ?? 'bg-slate-900 text-slate-400 border-slate-700'
+  const score      = company.score
 
   const websiteHost = (() => {
     try { return new URL(company.website).hostname.replace('www.', '') }
     catch { return company.website }
   })()
 
-  // Local state for the in-progress feedback before saving
   const [pendingRating, setPendingRating] = useState<FeedbackRating | null>(
     feedback?.rating !== undefined ? feedback.rating : null
   )
   const [selectedTags, setSelectedTags] = useState<string[]>(feedback?.tags ?? [])
   const [note, setNote]                 = useState(feedback?.note ?? '')
   const [showNote, setShowNote]         = useState(!!(feedback?.note))
+  const [showBreakdown, setShowBreakdown] = useState(false)
 
   const activeRating = pendingRating !== null ? pendingRating : feedback?.rating
 
   function handleRating(r: FeedbackRating) {
     setPendingRating(r)
-    // Reset tags when switching rating direction (pass → positive or vice versa)
     const wasNegative = activeRating !== undefined && activeRating < 1
     const isNegative  = r < 1
     if (wasNegative !== isNegative) setSelectedTags([])
@@ -66,6 +84,8 @@ export default function RecCompanyCard({ company, feedback, onFeedback }: Props)
   const isNegative    = isRated && activeRating < 1
   const suggestedTags = isNegative ? PASS_TAGS : POSITIVE_TAGS
 
+  const recBadge = score ? REC_BADGE[score.recommendation] : null
+
   return (
     <div className={`bg-terrain-surface border rounded-lg p-5 flex flex-col gap-4 transition-all duration-200 ${
       isRated
@@ -86,6 +106,11 @@ export default function RecCompanyCard({ company, feedback, onFeedback }: Props)
             <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${stageClass}`}>
               {company.stage}
             </span>
+            {recBadge && (
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${recBadge.cls}`}>
+                {recBadge.label}
+              </span>
+            )}
             {isRated && (
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${RATING_STYLES[activeRating as FeedbackRating].active}`}>
                 {RATING_LABELS[activeRating as FeedbackRating]}
@@ -94,6 +119,15 @@ export default function RecCompanyCard({ company, feedback, onFeedback }: Props)
           </div>
           <p className="text-terrain-muted text-xs font-mono leading-relaxed">{company.tagline}</p>
         </div>
+
+        {/* MQS / MUS / Fit scores */}
+        {score && (
+          <div className="flex gap-1.5 flex-shrink-0">
+            <ScorePill label="MQS" value={score.mqs} />
+            <ScorePill label="MUS" value={score.mus} />
+            <ScorePill label="Fit" value={score.combinedScore} />
+          </div>
+        )}
       </div>
 
       {/* Meta row */}
@@ -112,6 +146,59 @@ export default function RecCompanyCard({ company, feedback, onFeedback }: Props)
         <p className="text-[10px] font-mono uppercase tracking-widest text-terrain-gold mb-1">Why Mucker</p>
         <p className="text-xs font-mono text-terrain-text/80 leading-relaxed">{company.why_mucker}</p>
       </div>
+
+      {/* Risks + Next Step (from scoring) */}
+      {score && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Risks */}
+          <div className="rounded bg-terrain-bg border border-terrain-border px-3 py-2.5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-red-400/70 mb-1">Risks</p>
+            <ul className="flex flex-col gap-1">
+              {score.muckerLens.mainRisks.map((r, i) => (
+                <li key={i} className="text-xs font-mono text-terrain-muted/80 leading-relaxed">– {r}</li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Next Step */}
+          <div className="rounded bg-terrain-bg border border-terrain-border px-3 py-2.5">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-terrain-gold/60 mb-1">Next Step</p>
+            <p className="text-xs font-mono text-terrain-text/80 leading-relaxed">{score.muckerLens.suggestedNextStep}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Score breakdown toggle */}
+      {score && (
+        <button
+          onClick={() => setShowBreakdown(v => !v)}
+          className="text-[10px] font-mono text-terrain-muted hover:text-terrain-gold transition-colors text-left"
+        >
+          {showBreakdown ? '▲ Hide score breakdown' : '▼ Show score breakdown'}
+        </button>
+      )}
+
+      {/* Score breakdown detail */}
+      {score && showBreakdown && (
+        <div className="rounded bg-terrain-bg border border-terrain-border px-3 py-2.5 flex flex-col gap-3">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-terrain-muted mb-1.5">MQS Features</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+              {Object.entries(score.muckerLens.whyMucker.length > 0 ? {} : {}).map(([k, v]) => (
+                <span key={k} className="text-[10px] font-mono text-terrain-muted">{k}: {v as number}</span>
+              ))}
+              {score.muckerLens.whyMucker.map((w, i) => (
+                <span key={i} className="text-[10px] font-mono text-emerald-400/70 col-span-2">✓ {w}</span>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-6 text-[10px] font-mono text-terrain-muted">
+            <span>MQS <span className="text-terrain-text">{score.mqs}</span></span>
+            <span>MUS <span className="text-terrain-text">{score.mus}</span></span>
+            <span>Combined <span className="text-terrain-text">{score.combinedScore}</span></span>
+          </div>
+        </div>
+      )}
 
       {/* Links */}
       <div className="flex items-center gap-3 border-t border-terrain-border pt-3">

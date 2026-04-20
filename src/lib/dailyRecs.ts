@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { scoreCompany, type ProspectScore } from './prospecting/scoring'
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string
 
@@ -12,6 +13,7 @@ export interface RecCompany {
   why_mucker: string
   founded: number | null
   location: string | null
+  score?: ProspectScore
 }
 
 // ─── Feedback types ───────────────────────────────────────────────────────────
@@ -256,7 +258,8 @@ export async function generateTodayRecs(userId: string): Promise<RecCompany[]> {
   const today   = new Date().toISOString().slice(0, 10)
   const profile = await buildFeedbackProfile(userId)
   const prompt  = buildPrompt(profile, today)
-  const companies = await callWithWebSearch(prompt)
+  const raw = await callWithWebSearch(prompt)
+  const companies = raw.map(c => ({ ...c, score: scoreCompany(c) }))
 
   await supabase.from('daily_recs').upsert(
     { user_id: userId, date: today, companies },
