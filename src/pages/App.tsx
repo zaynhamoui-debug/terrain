@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { generateMarketMap, scoreCompanies } from '../lib/claudeApi'
+import { generateMarketMap, analyzeCompanyLandscape, scoreCompanies } from '../lib/claudeApi'
 import { MarketMap, Company, SavedMap } from '../types/marketMap'
-import SearchBar    from '../components/SearchBar'
+import SearchBar, { SearchMode } from '../components/SearchBar'
 import SegmentRow   from '../components/SegmentRow'
 import WhiteSpaces  from '../components/WhiteSpaces'
 import KeyTrends    from '../components/KeyTrends'
@@ -26,6 +26,17 @@ const LOADING_MESSAGES = [
   'Cross-referencing market signals…',
   'Synthesizing intelligence…',
   'Validating company profiles…',
+]
+
+const COMPANY_LOADING_MESSAGES = [
+  'Identifying competitors…',
+  'Mapping competitive landscape…',
+  'Categorizing market tiers…',
+  'Analyzing field leaders…',
+  'Profiling challengers…',
+  'Spotting up and comers…',
+  'Synthesizing intelligence…',
+  'Building landscape view…',
 ]
 
 type ViewMode = 'grid' | 'heatmap' | 'compare' | 'pipeline'
@@ -63,6 +74,9 @@ export default function AppPage() {
   const [dbIndustries,    setDbIndustries]     = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // Search mode
+  const [searchMode, setSearchMode] = useState<SearchMode>('market')
+
   // Deal flow
   const [dealFlowMap,  setDealFlowMap]  = useState<Record<string, string>>({})
 
@@ -95,10 +109,34 @@ export default function AppPage() {
     fetchDealFlow()
     fetchIndustries()
     fetchTracking()
-    // Restore last map after back navigation
-    const lastMapId = sessionStorage.getItem('terrain_last_map_id')
-    if (lastMapId) loadSavedMap(lastMapId)
+    // Restore last map + scores instantly from cached data (no Supabase round trip)
+    const cachedMap    = sessionStorage.getItem('terrain_last_map_data')
+    const cachedId     = sessionStorage.getItem('terrain_last_map_id')
+    const cachedScores = cachedId ? sessionStorage.getItem(`terrain_scores_${cachedId}`) : null
+    if (cachedMap) {
+      try {
+        setCurrentMap(JSON.parse(cachedMap) as MarketMap)
+        if (cachedId) setCurrentMapId(cachedId)
+        if (cachedScores) setScoresMap(JSON.parse(cachedScores))
+      } catch { /* ignore corrupt cache */ }
+    } else if (cachedId) {
+      loadSavedMap(cachedId)
+    }
   }, [navigate])
+
+  // Persist map data immediately whenever it changes (not waiting for Supabase)
+  useEffect(() => {
+    if (currentMap) {
+      sessionStorage.setItem('terrain_last_map_data', JSON.stringify(currentMap))
+    }
+  }, [currentMap])
+
+  // Persist scores to sessionStorage whenever they update
+  useEffect(() => {
+    if (currentMapId && Object.keys(scoresMap).length > 0) {
+      sessionStorage.setItem(`terrain_scores_${currentMapId}`, JSON.stringify(scoresMap))
+    }
+  }, [scoresMap, currentMapId])
 
   // Rotate loading messages
   useEffect(() => {
@@ -197,11 +235,33 @@ export default function AppPage() {
     setTimeout(() => setShareStatus('idle'), 3000)
   }
 
+  function extractCompanyFromUrl(input: string): { name: string; url: string } | null {
+    try {
+      const raw = input.trim()
+      if (!raw.includes('.') && !raw.startsWith('http')) return null
+      const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`)
+      // LinkedIn company URL
+      const liMatch = url.pathname.match(/\/company\/([^/?#]+)/)
+      if (liMatch) {
+        const slug = liMatch[1]
+        const name = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        return { name, url: raw }
+      }
+      // General website — use primary domain
+      const domain = url.hostname.replace(/^www\./, '').split('.')[0]
+      const name = domain.charAt(0).toUpperCase() + domain.slice(1)
+      return { name, url: raw }
+    } catch {
+      return null
+    }
+  }
+
   async function handleSearch(query: string) {
     setIsLoading(true)
     setError(null)
     setCurrentMap(null)
     setCurrentMapId(null)
+    setScoresMap({})
     setActiveSegment(null)
     setStageFilter([])
     setHeadcountFilter([])
@@ -214,14 +274,36 @@ export default function AppPage() {
     setLoadingMsgIdx(0)
     setViewMode('grid')
     setChatInitialQ(undefined)
+    // Clear all stale caches so segment pages reload fresh data for the new map
+    sessionStorage.removeItem('terrain_last_map_data')
+    sessionStorage.removeItem('terrain_last_map_id')
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith('terrain_seg_')) sessionStorage.removeItem(key)
+    }
 
     try {
-      const map = await generateMarketMap(query)
+      let map
+      if (searchMode === 'company') {
+        const urlResult = extractCompanyFromUrl(query)
+        const companyName = urlResult?.name ?? query
+        const urlHint     = urlResult?.url
+        map = await analyzeCompanyLandscape(companyName, urlHint)
+      } else {
+        map = await generateMarketMap(query)
+      }
       setCurrentMap(map)
+      if (map.is_company_search) setViewMode('heatmap')
 
-      // Score companies in background
+      // Score companies in background — capture mapId at call time to avoid stale closure
       const allCompanies = map.segments.flatMap(s => s.companies)
-      scoreCompanies(allCompanies).then(scores => setScoresMap(s => ({ ...s, ...scores })))
+      const scoringMap = map
+      scoreCompanies(allCompanies).then(scores => {
+        // Only apply scores if the map hasn't changed since this request started
+        setCurrentMap(m => {
+          if (m === scoringMap) setScoresMap(scores)
+          return m
+        })
+      })
 
       // Auto-save to Supabase
       const { data, error: saveErr } = await supabase
@@ -233,6 +315,7 @@ export default function AppPage() {
       if (!saveErr && data) {
         setCurrentMapId(data.id)
         sessionStorage.setItem('terrain_last_map_id', data.id)
+        sessionStorage.setItem('terrain_last_map_data', JSON.stringify(map))
       }
       fetchSavedMaps()
     } catch (err: unknown) {
@@ -244,26 +327,43 @@ export default function AppPage() {
   }
 
   async function loadSavedMap(id: string) {
-    const { data } = await supabase
-      .from('saved_maps')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (data) {
+    try {
+      const { data, error } = await supabase
+        .from('saved_maps')
+        .select('*')
+        .eq('id', id)
+        .single()
+      if (error || !data) return
       setCurrentMap(data.map_data as MarketMap)
       setCurrentMapId(data.id)
+      // Restore cached scores for this specific map
+      const cachedScores = sessionStorage.getItem(`terrain_scores_${data.id}`)
+      if (cachedScores) {
+        try { setScoresMap(JSON.parse(cachedScores)) } catch { setScoresMap({}) }
+      } else {
+        setScoresMap({})
+      }
       sessionStorage.setItem('terrain_last_map_id', data.id)
+      sessionStorage.setItem('terrain_last_map_data', JSON.stringify(data.map_data))
       setActiveSegment(null)
       setError(null)
       setViewMode('grid')
       setChatInitialQ(undefined)
-    }
+    } catch { /* silently ignore */ }
   }
 
   async function handleDeleteMap(mapId: string) {
     if (!window.confirm('Delete this saved map? This cannot be undone.')) return
     await supabase.from('saved_maps').delete().eq('id', mapId)
     setSavedMaps(prev => prev.filter(m => m.id !== mapId))
+    sessionStorage.removeItem(`terrain_scores_${mapId}`)
+    if (currentMapId === mapId) {
+      setCurrentMap(null)
+      setCurrentMapId(null)
+      setScoresMap({})
+      sessionStorage.removeItem('terrain_last_map_data')
+      sessionStorage.removeItem('terrain_last_map_id')
+    }
   }
 
   function startRename(map: SavedMap) {
@@ -368,6 +468,15 @@ export default function AppPage() {
           )}
 
           <div className="flex items-center gap-2">
+            {/* Daily Picks link */}
+            <button
+              onClick={() => navigate('/daily')}
+              className="flex items-center gap-1.5 text-xs font-mono border border-terrain-border text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder px-3 py-1.5 rounded transition-all duration-200"
+            >
+              <span>✦</span>
+              <span className="hidden sm:inline">Daily Picks</span>
+            </button>
+
             {/* Targeted page link */}
             <button
               onClick={() => navigate('/targeted')}
@@ -514,7 +623,7 @@ export default function AppPage() {
                   </div>
                 </>
               )}
-              <SearchBar onSearch={handleSearch} isLoading={isLoading} industries={dbIndustries} />
+              <SearchBar onSearch={handleSearch} isLoading={isLoading} industries={dbIndustries} searchMode={searchMode} onModeChange={setSearchMode} />
             </div>
 
             {/* Loading state */}
@@ -526,7 +635,7 @@ export default function AppPage() {
                 </div>
                 <div className="text-center">
                   <p className="text-terrain-muted text-sm font-mono tracking-wide">
-                    {LOADING_MESSAGES[loadingMsgIdx]}
+                    {(searchMode === 'company' ? COMPANY_LOADING_MESSAGES : LOADING_MESSAGES)[loadingMsgIdx]}
                   </p>
                   <p className="text-terrain-subtle text-xs mt-2 font-mono">
                     This may take 10–15 seconds
@@ -578,7 +687,7 @@ export default function AppPage() {
 
                 {/* Heatmap view */}
                 {viewMode === 'heatmap' && (
-                  <HeatmapView map={currentMap} onCompanyClick={setSelectedCompany} scoresMap={scoresMap} />
+                  <HeatmapView map={currentMap} onCompanyClick={setSelectedCompany} scoresMap={scoresMap} onScoresUpdate={scores => setScoresMap(s => ({ ...s, ...scores }))} />
                 )}
 
                 {/* Grid view */}

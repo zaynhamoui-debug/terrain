@@ -1,5 +1,23 @@
 import { Company } from '../types/marketMap'
 
+/** Normalise a website value that may or may not already contain a protocol. */
+function toWebsiteHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  return `https://${value}`
+}
+
+/** Normalise a LinkedIn value that may be a full URL, a path, or just a slug. */
+function toLinkedInHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  if (value.startsWith('linkedin.com')) return `https://${value}`
+  if (value.startsWith('/company/') || value.startsWith('company/')) {
+    return `https://www.linkedin.com/${value.replace(/^\//, '')}`
+  }
+  return `https://www.linkedin.com/company/${value}`
+}
+
 export const STAGE_STYLES: Record<string, string> = {
   'Pre-Seed':  'bg-slate-900  text-slate-400  border-slate-700',
   'Seed':      'bg-emerald-950 text-emerald-400 border-emerald-800',
@@ -149,9 +167,9 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
         <span className="truncate">{company.hq}</span>
         {company.founded ? <span className="shrink-0">est. {company.founded}</span> : null}
         <div className="ml-auto flex items-center gap-2 shrink-0">
-          {company.website && (
+          {toWebsiteHref(company.website) && (
             <a
-              href={`https://${company.website}`}
+              href={toWebsiteHref(company.website)!}
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
@@ -161,9 +179,9 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
               ↗
             </a>
           )}
-          {company.linkedin && (
+          {toLinkedInHref(company.linkedin) && (
             <a
-              href={`https://linkedin.com/${company.linkedin}`}
+              href={toLinkedInHref(company.linkedin)!}
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}

@@ -3,6 +3,22 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Company } from '../types/marketMap'
 import { supabase } from '../lib/supabase'
 import { copyToClipboard } from '../lib/export'
+
+function toWebsiteHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  return `https://${value}`
+}
+
+function toLinkedInHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value.startsWith('http://') || value.startsWith('https://')) return value
+  if (value.startsWith('linkedin.com')) return `https://${value}`
+  if (value.startsWith('/company/') || value.startsWith('company/')) {
+    return `https://www.linkedin.com/${value.replace(/^\//, '')}`
+  }
+  return `https://www.linkedin.com/company/${value}`
+}
 import { generateInvestmentMemo, detectRedFlags } from '../lib/chatApi'
 import { scoreToColor } from './CompanyCard'
 
@@ -354,13 +370,13 @@ export default function CompanyModal({
               </div>
               <p className="text-terrain-muted text-sm font-mono mt-1.5 leading-relaxed">{company.tagline}</p>
               <div className="flex items-center gap-4 mt-1">
-                {company.website && (
-                  <a href={`https://${company.website}`} target="_blank" rel="noopener noreferrer" className="text-terrain-gold text-xs font-mono hover:underline inline-block">
+                {toWebsiteHref(company.website) && (
+                  <a href={toWebsiteHref(company.website)!} target="_blank" rel="noopener noreferrer" className="text-terrain-gold text-xs font-mono hover:underline inline-block">
                     {company.website} ↗
                   </a>
                 )}
-                {company.linkedin && (
-                  <a href={`https://linkedin.com/${company.linkedin}`} target="_blank" rel="noopener noreferrer" className="text-terrain-muted text-xs font-mono hover:text-terrain-gold hover:underline inline-block transition-colors">
+                {toLinkedInHref(company.linkedin) && (
+                  <a href={toLinkedInHref(company.linkedin)!} target="_blank" rel="noopener noreferrer" className="text-terrain-muted text-xs font-mono hover:text-terrain-gold hover:underline inline-block transition-colors">
                     LinkedIn ↗
                   </a>
                 )}

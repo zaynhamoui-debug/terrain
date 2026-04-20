@@ -7,6 +7,7 @@ import AppPage      from './pages/App'
 import SharedMap    from './pages/SharedMap'
 import SegmentPage    from './pages/SegmentPage'
 import TargetedPage   from './pages/TargetedPage'
+import DailyPicks     from './pages/DailyPicks'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/share/:id"  element={<SharedMap />} />
         <Route path="/segment"    element={<ProtectedRoute><SegmentPage /></ProtectedRoute>} />
         <Route path="/targeted"   element={<ProtectedRoute><TargetedPage /></ProtectedRoute>} />
+        <Route path="/daily"      element={<ProtectedRoute><DailyPicks /></ProtectedRoute>} />
         <Route path="/"           element={<Navigate to="/app" replace />} />
         <Route path="*"           element={<Navigate to="/app" replace />} />
       </Routes>
