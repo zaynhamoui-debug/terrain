@@ -1,9 +1,13 @@
 import { useState, FormEvent } from 'react'
 
+export type SearchMode = 'market' | 'company'
+
 interface Props {
   onSearch: (query: string) => void
   isLoading: boolean
   industries?: string[]
+  searchMode?: SearchMode
+  onModeChange?: (mode: SearchMode) => void
 }
 
 // Map each industry string to a category
@@ -305,7 +309,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Other':               'text-terrain-muted border-terrain-border hover:border-terrain-subtle hover:text-terrain-text',
 }
 
-export default function SearchBar({ onSearch, isLoading, industries = [] }: Props) {
+export default function SearchBar({ onSearch, isLoading, industries = [], searchMode = 'market', onModeChange }: Props) {
   const [query, setQuery] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
@@ -346,12 +350,40 @@ export default function SearchBar({ onSearch, isLoading, industries = [] }: Prop
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Mode toggle */}
+      {onModeChange && (
+        <div className="flex items-center gap-1 bg-terrain-surface border border-terrain-border rounded-lg p-1 w-fit mb-4">
+          <button
+            type="button"
+            onClick={() => onModeChange('market')}
+            className={`px-4 py-1.5 rounded text-[11px] font-mono uppercase tracking-widest transition-colors ${
+              searchMode === 'market'
+                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                : 'text-terrain-muted hover:text-terrain-text'
+            }`}
+          >
+            ⬡ Market Map
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange('company')}
+            className={`px-4 py-1.5 rounded text-[11px] font-mono uppercase tracking-widest transition-colors ${
+              searchMode === 'company'
+                ? 'bg-terrain-gold text-terrain-bg font-bold'
+                : 'text-terrain-muted hover:text-terrain-text'
+            }`}
+          >
+            ◎ Company Analysis
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="relative">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           disabled={isLoading}
-          placeholder="Enter a sector or company name…"
+          placeholder={searchMode === 'company' ? 'Company name, website URL, or LinkedIn URL…' : 'Enter a market sector (e.g. Cybersecurity, Fintech)…'}
           className="w-full bg-terrain-surface border border-terrain-border rounded-lg px-5 py-4 pr-28 text-terrain-text text-sm font-mono placeholder-terrain-muted focus:outline-none focus:border-terrain-gold transition-colors disabled:opacity-60"
           autoFocus
         />
@@ -360,11 +392,11 @@ export default function SearchBar({ onSearch, isLoading, industries = [] }: Prop
           disabled={isLoading || !query.trim()}
           className="absolute right-2 top-1/2 -translate-y-1/2 px-5 py-2 bg-terrain-gold text-terrain-bg text-xs font-bold rounded tracking-widest uppercase hover:opacity-90 disabled:opacity-40 transition-opacity"
         >
-          {isLoading ? '···' : 'MAP →'}
+          {isLoading ? '···' : searchMode === 'company' ? 'ANALYZE →' : 'MAP →'}
         </button>
       </form>
 
-      {orderedCategories.length > 0 && (
+      {orderedCategories.length > 0 && searchMode === 'market' && (
         <div className="mt-6 space-y-3">
           {orderedCategories.map(cat => {
             const items = grouped[cat] ?? []

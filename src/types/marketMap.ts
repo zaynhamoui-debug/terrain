@@ -5,6 +5,9 @@ export type Stage =
 export type MomentumSignal =
   | '🚀 Hypergrowth' | '📈 Growing' | '➡️ Stable' | '⚠️ Challenged' | '🔒 Stealth'
 
+export type MarketTier =
+  | 'Field Leader' | 'Challenger' | 'Up and Comer' | 'Startup' | 'Niche Player'
+
 export interface Company {
   id: string
   name: string
@@ -23,6 +26,7 @@ export interface Company {
   key_customers: string[]
   investors: string[]
   momentum_signal: MomentumSignal
+  market_tier?: MarketTier
   is_focal_company: boolean
 }
 
@@ -56,6 +60,8 @@ export interface MarketMap {
   key_trends: KeyTrend[]
   notable_exits: NotableExit[]
   data_sources: string[]
+  is_company_search?: boolean
+  focal_company?: string
 }
 
 export interface SavedMap {

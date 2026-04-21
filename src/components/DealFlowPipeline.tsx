@@ -46,11 +46,13 @@ export default function DealFlowPipeline({ onCompanyClick }: Props) {
   }
 
   async function moveEntry(entryId: string, newStatus: string) {
-    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: newStatus } : e))
-    await supabase
+    const prev = entries
+    setEntries(entries => entries.map(e => e.id === entryId ? { ...e, status: newStatus } : e))
+    const { error } = await supabase
       .from('deal_flow')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', entryId)
+    if (error) setEntries(prev) // rollback on failure
   }
 
   async function removeEntry(entryId: string) {

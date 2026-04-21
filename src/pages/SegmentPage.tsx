@@ -37,15 +37,38 @@ export default function SegmentPage() {
     fetchTracking()
   }, [])
 
-  async function load() {
+  async function load(forceRefresh = false) {
     if (!state) return
+    const companyKey = `terrain_seg_companies_${state.sector}_${state.segmentName}`
+    const scoreKey   = `terrain_seg_scores_${state.sector}_${state.segmentName}`
+
+    // Restore from cache instantly — no reload needed
+    if (!forceRefresh) {
+      const cachedCompanies = sessionStorage.getItem(companyKey)
+      const cachedScores    = sessionStorage.getItem(scoreKey)
+      if (cachedCompanies) {
+        try {
+          setCompanies(JSON.parse(cachedCompanies))
+          if (cachedScores) setScoresMap(JSON.parse(cachedScores))
+          setLoading(false)
+          return
+        } catch { /* fall through to fresh load */ }
+      }
+    }
+
     setLoading(true)
     setError(null)
+    setCompanies([])
+    setScoresMap({})
     try {
       const result = await searchAndEnrichSegment(state.sector, state.segmentName, state.segmentDescription)
       setCompanies(result)
-      // Score in background
-      scoreCompanies(result).then(scores => setScoresMap(scores))
+      sessionStorage.setItem(companyKey, JSON.stringify(result))
+      // Score in background, then persist
+      scoreCompanies(result).then(scores => {
+        setScoresMap(scores)
+        sessionStorage.setItem(scoreKey, JSON.stringify(scores))
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load companies')
     } finally {
@@ -115,7 +138,7 @@ export default function SegmentPage() {
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
       <header className="sticky top-0 z-20 border-b border-terrain-border bg-terrain-bg/90 backdrop-blur px-6 py-4 flex items-center gap-4">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate('/app')}
           className="text-terrain-muted hover:text-terrain-gold text-xs font-mono transition-colors"
         >
           ← Back
@@ -128,9 +151,16 @@ export default function SegmentPage() {
           </div>
         </div>
         {!loading && (
-          <span className="ml-auto shrink-0 text-xs font-mono text-terrain-muted">
-            {filtered.length} companies
-          </span>
+          <div className="ml-auto flex items-center gap-3 shrink-0">
+            <span className="text-xs font-mono text-terrain-muted">{filtered.length} companies</span>
+            <button
+              onClick={() => { void load(true) }}
+              className="text-[10px] font-mono text-terrain-muted hover:text-terrain-gold border border-terrain-border hover:border-terrain-goldBorder px-2 py-1 rounded transition-colors"
+              title="Refresh with new search"
+            >
+              ↻ Refresh
+            </button>
+          </div>
         )}
       </header>
 
@@ -160,7 +190,7 @@ export default function SegmentPage() {
         {error && (
           <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
             <p className="text-red-400 text-sm font-mono">{error}</p>
-            <button onClick={load} className="text-terrain-gold text-xs font-mono border border-terrain-goldBorder px-4 py-2 rounded hover:bg-terrain-goldDim transition-colors">
+            <button onClick={() => { void load(true) }} className="text-terrain-gold text-xs font-mono border border-terrain-goldBorder px-4 py-2 rounded hover:bg-terrain-goldDim transition-colors">
               Retry
             </button>
           </div>

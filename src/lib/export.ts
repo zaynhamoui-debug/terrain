@@ -13,8 +13,8 @@ export function exportCSV(map: MarketMap): void {
         seg.name, c.name, c.tagline, c.stage,
         c.funding_display, c.valuation_display, c.founded,
         c.hq, c.headcount_range, c.website, c.momentum_signal,
-        c.last_round, c.investors.join('; '),
-        c.key_customers.join('; '), c.differentiator,
+        c.last_round, (c.investors ?? []).join('; '),
+        (c.key_customers ?? []).join('; '), c.differentiator,
       ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
     )
   )
