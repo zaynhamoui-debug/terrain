@@ -9,7 +9,15 @@ import {
   submitFeedback,
   getFeedbackMap,
 } from '../lib/dailyRecs'
+import {
+  getTodayPicksFromDB,
+  submitPickFeedback,
+  formatRaised,
+  type PickCompany,
+  type PickFeedbackLabel,
+} from '../lib/prospectingPicks'
 import RecCompanyCard from '../components/RecCompanyCard'
+import PickCard from '../components/PickCard'
 
 const LOADING_MESSAGES = [
   'Scouting the web for startups…',
@@ -24,8 +32,16 @@ const LOADING_MESSAGES = [
 export default function DailyPicks() {
   const navigate = useNavigate()
   const [userId,    setUserId]    = useState<string | null>(null)
+
+  // Pre-computed Harmonic picks (primary)
+  const [picks,     setPicks]     = useState<PickCompany[] | null>(null)
+  const [pickFeedback, setPickFeedback] = useState<Record<string, PickFeedbackLabel>>({})
+
+  // On-demand Claude picks (fallback)
   const [companies, setCompanies] = useState<RecCompany[]>([])
   const [feedback,  setFeedback]  = useState<Record<string, FeedbackEntry>>({})
+
+  const [source,    setSource]    = useState<'harmonic' | 'claude' | null>(null)
   const [loading,   setLoading]   = useState(true)
   const [msgIdx,    setMsgIdx]    = useState(0)
   const [error,     setError]     = useState<string | null>(null)
@@ -37,10 +53,10 @@ export default function DailyPicks() {
 
   // Cycle loading messages
   useEffect(() => {
-    if (!loading) return
+    if (!loading && !isRegen) return
     const id = setInterval(() => setMsgIdx(i => (i + 1) % LOADING_MESSAGES.length), 2200)
     return () => clearInterval(id)
-  }, [loading])
+  }, [loading, isRegen])
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -49,6 +65,16 @@ export default function DailyPicks() {
       setUserId(uid)
 
       try {
+        // 1. Try pre-computed Harmonic picks first
+        const dbPicks = await getTodayPicksFromDB()
+        if (dbPicks && dbPicks.length > 0) {
+          setPicks(dbPicks)
+          setSource('harmonic')
+          setLoading(false)
+          return
+        }
+
+        // 2. Fall back to on-demand Claude web search
         const [cached, fbMap] = await Promise.all([
           getTodayRecs(uid),
           getFeedbackMap(uid),
@@ -57,14 +83,14 @@ export default function DailyPicks() {
 
         if (cached && cached.length > 0) {
           setCompanies(cached)
-          setLoading(false)
         } else {
           const fresh = await generateTodayRecs(uid)
           setCompanies(fresh)
-          setLoading(false)
         }
+        setSource('claude')
       } catch (e) {
         setError((e as Error).message)
+      } finally {
         setLoading(false)
       }
     })
@@ -76,8 +102,14 @@ export default function DailyPicks() {
     await submitFeedback(userId, company, entry)
   }
 
-  async function handleRegen() {
+  async function handlePickFeedback(pick: PickCompany, label: PickFeedbackLabel) {
     if (!userId) return
+    setPickFeedback(prev => ({ ...prev, [pick.pickId]: label }))
+    await submitPickFeedback(userId, pick, label)
+  }
+
+  async function handleRegen() {
+    if (!userId || source !== 'claude') return
     setIsRegen(true)
     setError(null)
     setMsgIdx(0)
@@ -91,7 +123,8 @@ export default function DailyPicks() {
     }
   }
 
-  const ratedCount = Object.keys(feedback).filter(k => companies.some(c => c.name === k) && feedback[k].rating !== undefined).length
+  const isHarmonic    = source === 'harmonic'
+  const displayCount  = isHarmonic ? (picks?.length ?? 0) : companies.length
 
   return (
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
@@ -124,7 +157,7 @@ export default function DailyPicks() {
           </div>
 
           <div className="flex items-center gap-2">
-            {!loading && companies.length > 0 && (
+            {source === 'claude' && !loading && companies.length > 0 && (
               <button
                 onClick={handleRegen}
                 disabled={isRegen}
@@ -144,52 +177,77 @@ export default function DailyPicks() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
-        {/* Title section */}
+        {/* Title */}
         <div className="mb-8">
           <h2 className="font-display text-2xl font-bold text-terrain-text mb-1">
             Today's Picks
           </h2>
           <p className="text-terrain-muted text-xs font-mono">{today}</p>
-          {!loading && companies.length > 0 && (
-            <p className="text-terrain-muted text-xs font-mono mt-2">
-              5 startups scouted to match Mucker Capital's thesis ·{' '}
-              <span className="text-terrain-gold">{ratedCount}/{companies.length} rated</span>
-              {ratedCount === companies.length && ratedCount > 0 && (
-                <span className="text-terrain-muted"> · Tomorrow's picks will adapt to your ratings</span>
-              )}
-            </p>
+
+          {!loading && displayCount > 0 && (
+            <div className="flex items-center gap-3 mt-2">
+              <p className="text-terrain-muted text-xs font-mono">
+                {displayCount} startups scouted to match Mucker Capital's thesis
+              </p>
+              {/* Source badge */}
+              <span className={`text-[9px] font-mono px-2 py-0.5 rounded border uppercase tracking-widest ${
+                isHarmonic
+                  ? 'border-terrain-goldBorder bg-terrain-goldDim text-terrain-gold'
+                  : 'border-terrain-border text-terrain-muted'
+              }`}>
+                {isHarmonic ? '⬡ Harmonic · Pre-scored' : '⬡ Claude · Web Search'}
+              </span>
+            </div>
           )}
         </div>
 
-        {/* Loading state */}
+        {/* Loading */}
         {(loading || isRegen) && (
           <div className="flex flex-col items-center justify-center py-24 gap-6">
             <div className="w-6 h-6 border-2 border-terrain-gold border-t-transparent rounded-full animate-spin" />
             <p className="text-terrain-muted text-xs font-mono tracking-wider animate-pulse">
               {LOADING_MESSAGES[msgIdx]}
             </p>
-            <p className="text-terrain-muted/50 text-[10px] font-mono">
-              Web search takes 20–40 seconds
-            </p>
+            {!isHarmonic && (
+              <p className="text-terrain-muted/50 text-[10px] font-mono">
+                Web search takes 20–40 seconds
+              </p>
+            )}
           </div>
         )}
 
-        {/* Error state */}
+        {/* Error */}
         {error && !loading && !isRegen && (
           <div className="rounded-lg border border-red-900 bg-red-950/30 px-5 py-4 text-sm font-mono text-red-400">
             <p className="font-bold mb-1">Failed to load picks</p>
             <p className="text-red-400/70 text-xs">{error}</p>
-            <button
-              onClick={handleRegen}
-              className="mt-3 text-xs border border-red-800 text-red-400 hover:bg-red-950 px-3 py-1.5 rounded transition-colors"
-            >
-              Try again
-            </button>
+            {source === 'claude' && (
+              <button
+                onClick={handleRegen}
+                className="mt-3 text-xs border border-red-800 text-red-400 hover:bg-red-950 px-3 py-1.5 rounded transition-colors"
+              >
+                Try again
+              </button>
+            )}
           </div>
         )}
 
-        {/* Company cards */}
-        {!loading && !isRegen && companies.length > 0 && (
+        {/* Harmonic pre-computed picks */}
+        {!loading && !isRegen && isHarmonic && picks && picks.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {picks.map(pick => (
+              <PickCard
+                key={pick.pickId}
+                pick={pick}
+                feedback={pickFeedback[pick.pickId]}
+                onFeedback={label => handlePickFeedback(pick, label)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Claude on-demand picks (fallback) */}
+        {!loading && !isRegen && source === 'claude' && companies.length > 0 && (
           <div className="flex flex-col gap-4">
             {companies.map(company => (
               <RecCompanyCard
@@ -202,10 +260,12 @@ export default function DailyPicks() {
           </div>
         )}
 
-        {/* Footer note */}
-        {!loading && !isRegen && companies.length > 0 && (
+        {/* Footer */}
+        {!loading && !isRegen && displayCount > 0 && (
           <p className="mt-10 text-center text-[10px] font-mono text-terrain-muted/40 uppercase tracking-widest">
-            Rate companies to personalise tomorrow's picks
+            {isHarmonic
+              ? 'Sourced from Harmonic · scored with Mucker criteria · refreshed daily at 6am PT'
+              : 'Rate companies to personalise tomorrow\'s picks'}
           </p>
         )}
       </main>
