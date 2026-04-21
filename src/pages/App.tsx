@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { generateMarketMap, analyzeCompanyLandscape, scoreCompanies } from '../lib/claudeApi'
 import { MarketMap, Company, SavedMap } from '../types/marketMap'
+import { scoreMarketCompany, type ProspectScore } from '../lib/prospecting/scoring'
 import SearchBar, { SearchMode } from '../components/SearchBar'
 import SegmentRow   from '../components/SegmentRow'
 import WhiteSpaces  from '../components/WhiteSpaces'
@@ -81,8 +82,9 @@ export default function AppPage() {
   const [dealFlowMap,  setDealFlowMap]  = useState<Record<string, string>>({})
 
   // Scores + tracking
-  const [scoresMap,    setScoresMap]    = useState<Record<string, number>>({})
-  const [trackingMap,  setTrackingMap]  = useState<Record<string, 'viewed' | 'targeted'>>({})
+  const [scoresMap,        setScoresMap]        = useState<Record<string, number>>({})
+  const [prospectScoresMap, setProspectScoresMap] = useState<Record<string, ProspectScore>>({})
+  const [trackingMap,      setTrackingMap]      = useState<Record<string, 'viewed' | 'targeted'>>({})
 
   // Rename state: mapId -> editing name
   const [renamingId,    setRenamingId]    = useState<string | null>(null)
@@ -115,9 +117,14 @@ export default function AppPage() {
     const cachedScores = cachedId ? sessionStorage.getItem(`terrain_scores_${cachedId}`) : null
     if (cachedMap) {
       try {
-        setCurrentMap(JSON.parse(cachedMap) as MarketMap)
+        const restoredMap = JSON.parse(cachedMap) as MarketMap
+        setCurrentMap(restoredMap)
         if (cachedId) setCurrentMapId(cachedId)
         if (cachedScores) setScoresMap(JSON.parse(cachedScores))
+        // Recompute prospect scores synchronously from cached map
+        const pScores: Record<string, ProspectScore> = {}
+        for (const c of restoredMap.segments.flatMap(s => s.companies)) pScores[c.id] = scoreMarketCompany(c)
+        setProspectScoresMap(pScores)
       } catch { /* ignore corrupt cache */ }
     } else if (cachedId) {
       loadSavedMap(cachedId)
@@ -294,8 +301,13 @@ export default function AppPage() {
       setCurrentMap(map)
       if (map.is_company_search) setViewMode('heatmap')
 
-      // Score companies in background — capture mapId at call time to avoid stale closure
+      // Compute prospect scores synchronously (no API call needed)
       const allCompanies = map.segments.flatMap(s => s.companies)
+      const pScores: Record<string, ProspectScore> = {}
+      for (const c of allCompanies) pScores[c.id] = scoreMarketCompany(c)
+      setProspectScoresMap(pScores)
+
+      // Score companies in background — capture mapId at call time to avoid stale closure
       const scoringMap = map
       scoreCompanies(allCompanies).then(scores => {
         // Only apply scores if the map hasn't changed since this request started
@@ -334,8 +346,13 @@ export default function AppPage() {
         .eq('id', id)
         .single()
       if (error || !data) return
-      setCurrentMap(data.map_data as MarketMap)
+      const savedMap = data.map_data as MarketMap
+      setCurrentMap(savedMap)
       setCurrentMapId(data.id)
+      // Recompute prospect scores
+      const pScores: Record<string, ProspectScore> = {}
+      for (const c of savedMap.segments.flatMap(s => s.companies)) pScores[c.id] = scoreMarketCompany(c)
+      setProspectScoresMap(pScores)
       // Restore cached scores for this specific map
       const cachedScores = sessionStorage.getItem(`terrain_scores_${data.id}`)
       if (cachedScores) {
@@ -884,6 +901,7 @@ export default function AppPage() {
                         dealFlowMap={dealFlowMap}
                         onAskAI={handleAskAI}
                         scoresMap={scoresMap}
+                        prospectScoresMap={prospectScoresMap}
                         trackingMap={trackingMap}
                       />
                     ))}
@@ -1030,6 +1048,7 @@ export default function AppPage() {
           onSetDealStatus={handleSetDealStatus}
           sector={currentMap?.sector}
           score={scoresMap[selectedCompany.id]}
+          prospectScore={prospectScoresMap[selectedCompany.id]}
           trackingStatus={trackingMap[selectedCompany.id]}
           onToggleTracking={handleToggleTracking}
         />

@@ -1,4 +1,5 @@
 import { Company } from '../types/marketMap'
+import type { ProspectScore } from '../lib/prospecting/scoring'
 
 /** Normalise a website value that may or may not already contain a protocol. */
 function toWebsiteHref(value: string | null | undefined): string | null {
@@ -61,10 +62,11 @@ interface Props {
   dealStatus?: string
   onAskAI?: (company: Company) => void
   score?: number
+  prospectScore?: ProspectScore
   trackingStatus?: 'viewed' | 'targeted'
 }
 
-export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist, dealStatus, onAskAI, score, trackingStatus }: Props) {
+export default function CompanyCard({ company, onSelect, isWatchlisted, onToggleWatchlist, dealStatus, onAskAI, score, prospectScore, trackingStatus }: Props) {
   const stageClass = STAGE_STYLES[company.stage] ?? 'bg-slate-900 text-slate-400 border-slate-700'
   const momentum   = company.momentum_signal?.split(' ')[0] ?? ''
   const dealInfo   = dealStatus ? DEAL_STATUS_STYLES[dealStatus] : null
@@ -85,7 +87,26 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
       } ${trackingStatus === 'viewed' ? 'opacity-70' : ''}`}
     >
       {/* Top-right actions */}
-      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+      <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
+        {/* Prospect score pills: MQS / MUS / Fit */}
+        {prospectScore && (
+          <div className="flex items-center gap-1">
+            {[
+              { label: 'MQS', val: prospectScore.mqs },
+              { label: 'MUS', val: prospectScore.mus },
+              { label: 'Fit', val: prospectScore.combinedScore },
+            ].map(({ label, val }) => {
+              const color = val >= 70 ? 'text-emerald-400' : val >= 50 ? 'text-terrain-gold' : 'text-red-400'
+              return (
+                <div key={label} className="flex flex-col items-center rounded bg-terrain-bg border border-terrain-border px-1.5 py-0.5 min-w-[32px]">
+                  <span className={`text-[11px] font-bold font-mono leading-tight ${color}`}>{val}</span>
+                  <span className="text-[8px] font-mono text-terrain-muted leading-tight">{label}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="flex items-center gap-1.5">
         {/* Score badge */}
         {hasScore && (
           <span
@@ -112,6 +133,7 @@ export default function CompanyCard({ company, onSelect, isWatchlisted, onToggle
             {isWatchlisted ? '♥' : '♡'}
           </span>
         )}
+        </div>
       </div>
 
       {/* Tracking + deal flow badges row */}

@@ -1,4 +1,5 @@
 import type { RecCompany } from '../dailyRecs'
+import type { Company } from '../../types/marketMap'
 
 export type Recommendation = 'strong_pick' | 'pick' | 'watch' | 'pass'
 
@@ -81,6 +82,78 @@ export function scoreCompany(company: RecCompany): ProspectScore {
   if (musSignals.hype_vertical === -8)    mainRisks.push('Operates in a hyped vertical; expect crowded cap table.')
   if (musSignals.non_obvious_geo === -10) mainRisks.push('Hot geography — competitive deal flow likely.')
   if (mainRisks.length === 0)            mainRisks.push('No structural red flags found; do standard diligence.')
+
+  const suggestedNextStep = rec === 'pass'
+    ? 'Do not prioritize unless new evidence appears.'
+    : rec === 'strong_pick'
+    ? "Fast-track: identify a warm intro path and review the founder's background today."
+    : rec === 'pick'
+    ? 'Review founder backgrounds and reach out within the week.'
+    : 'Add to watch list and revisit in 30 days for updated traction signals.'
+
+  return { mqs, mus, combinedScore: combined, recommendation: rec, muckerLens: { whyMucker, mainRisks, suggestedNextStep } }
+}
+
+// ─── Market-map Company scoring ───────────────────────────────────────────────
+// Maps the richer Company type (from the market map) into the same scoring logic.
+
+export function scoreMarketCompany(company: Company): ProspectScore {
+  const desc = `${company.tagline ?? ''} ${company.differentiator ?? ''}`.trim()
+
+  const totalRaisedUsd = (() => {
+    const m = company.funding_display?.match(/\$([\d.]+)(M|B|K)?/i)
+    if (!m) return 0
+    const n = parseFloat(m[1])
+    const unit = (m[2] ?? '').toUpperCase()
+    return unit === 'B' ? n * 1e9 : unit === 'K' ? n * 1e3 : n * 1e6
+  })()
+
+  const employeeCount = (() => {
+    const m = company.headcount_range?.match(/(\d[\d,]*)/)
+    return m ? parseInt(m[1].replace(/,/g, '')) : 0
+  })()
+
+  // Use RecCompany-compatible shape and delegate to scoreCompany
+  const proxy: RecCompany = {
+    name:       company.name,
+    website:    company.website,
+    linkedin:   company.linkedin,
+    industry:   company.momentum_signal ?? '',
+    stage:      company.stage,
+    tagline:    company.tagline ?? '',
+    why_mucker: desc,
+    founded:    company.founded ?? null,
+    location:   company.hq ?? null,
+  }
+
+  const base = scoreCompany(proxy)
+
+  // Supplement MQS with data only available on Company (funding, headcount)
+  let mqsAdj = 0
+  if (totalRaisedUsd > 0 && totalRaisedUsd <= 3_500_000)   mqsAdj += 5   // capital efficient
+  if (employeeCount >= 2 && employeeCount <= 30)            mqsAdj += 4   // right team size
+  if (company.momentum_signal?.includes('Hypergrowth'))     mqsAdj += 5   // clear momentum
+  if (company.investors && company.investors.length > 0)    mqsAdj += 3   // backed
+
+  let musAdj = 0
+  if (totalRaisedUsd > 10_000_000)                          musAdj -= 10  // over-funded
+  if (company.investors?.some(i => TIER_1_INVESTORS.some(t => i.toLowerCase().includes(t)))) musAdj -= 20
+
+  const mqs      = clamp(base.mqs + mqsAdj)
+  const mus      = clamp(base.mus + musAdj)
+  const combined = Math.round((mqs * mus) / 100)
+  const rec      = recommendationFor(mqs, mus, combined)
+
+  // Enrich why/risks with market-map-specific signals
+  const whyMucker = [...base.muckerLens.whyMucker]
+  const mainRisks = [...base.muckerLens.mainRisks]
+
+  if (mqsAdj >= 5 && !whyMucker.some(w => w.includes('capital')))
+    whyMucker.push('Capital-efficient with room for Mucker to lead.')
+  if (musAdj <= -20)
+    mainRisks.push('Tier-1 VC on cap table — Mucker may be crowded out.')
+  if (totalRaisedUsd > 10_000_000)
+    mainRisks.push('Already raised >$10M; may be too late for seed-stage entry.')
 
   const suggestedNextStep = rec === 'pass'
     ? 'Do not prioritize unless new evidence appears.'

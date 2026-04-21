@@ -21,6 +21,7 @@ function toLinkedInHref(value: string | null | undefined): string | null {
 }
 import { generateInvestmentMemo, detectRedFlags } from '../lib/chatApi'
 import { scoreToColor } from './CompanyCard'
+import type { ProspectScore } from '../lib/prospecting/scoring'
 
 interface Props {
   company: Company
@@ -32,6 +33,7 @@ interface Props {
   onSetDealStatus?: (companyId: string, companyName: string, status: string | null) => void
   sector?: string
   score?: number
+  prospectScore?: ProspectScore
   trackingStatus?: 'viewed' | 'targeted'
   onToggleTracking?: (company: Company, status: 'viewed' | 'targeted') => void
 }
@@ -229,7 +231,7 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function CompanyModal({
   company, mapId, onClose, isWatchlisted, onToggleWatchlist,
-  dealStatus, onSetDealStatus, sector, score, trackingStatus, onToggleTracking,
+  dealStatus, onSetDealStatus, sector, score, prospectScore, trackingStatus, onToggleTracking,
 }: Props) {
   const [note,         setNote]         = useState('')
   const [isSaving,     setIsSaving]     = useState(false)
@@ -405,6 +407,60 @@ export default function CompanyModal({
           {/* AI Investment Score */}
           {score !== undefined && score !== null && (
             <ScoreBadge score={score} />
+          )}
+
+          {/* Mucker Investment Criteria (MQS / MUS / Fit) */}
+          {prospectScore && (
+            <div className="rounded-lg border border-terrain-goldBorder bg-terrain-goldDim overflow-hidden">
+              <div className="px-4 py-3 border-b border-terrain-goldBorder/40 flex items-center justify-between gap-4 flex-wrap">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-terrain-gold">
+                  Mucker Investment Criteria
+                </span>
+                <div className="flex gap-3">
+                  {[
+                    { label: 'MQS', val: prospectScore.mqs,          title: 'Mucker Quality Score — stage, model, traction, defensibility' },
+                    { label: 'MUS', val: prospectScore.mus,           title: 'Mucker Under-the-Radar Score — non-obvious geo, boring vertical, quiet cap table' },
+                    { label: 'Fit', val: prospectScore.combinedScore, title: 'Combined fit score (MQS × MUS / 100)' },
+                  ].map(({ label, val, title }) => {
+                    const color = val >= 70 ? 'text-emerald-400' : val >= 50 ? 'text-terrain-gold' : 'text-red-400'
+                    return (
+                      <div key={label} className="flex flex-col items-center" title={title}>
+                        <span className={`text-xl font-bold font-mono ${color}`}>{val}</span>
+                        <span className="text-[9px] font-mono text-terrain-muted uppercase tracking-widest">{label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Why Mucker */}
+                <div>
+                  <p className="text-[9px] font-mono uppercase tracking-widest text-terrain-gold/70 mb-1.5">Why Mucker</p>
+                  <ul className="flex flex-col gap-1">
+                    {prospectScore.muckerLens.whyMucker.map((w, i) => (
+                      <li key={i} className="text-xs font-mono text-terrain-text/80 leading-relaxed">✓ {w}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Risks */}
+                <div>
+                  <p className="text-[9px] font-mono uppercase tracking-widest text-red-400/60 mb-1.5">Risks</p>
+                  <ul className="flex flex-col gap-1">
+                    {prospectScore.muckerLens.mainRisks.map((r, i) => (
+                      <li key={i} className="text-xs font-mono text-terrain-muted/80 leading-relaxed">– {r}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Next Step */}
+              <div className="px-4 py-2.5 border-t border-terrain-goldBorder/30 bg-terrain-bg/30">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-terrain-gold/60">Suggested Next Step · </span>
+                <span className="text-xs font-mono text-terrain-text/80">{prospectScore.muckerLens.suggestedNextStep}</span>
+              </div>
+            </div>
           )}
 
           {/* Stats grid */}

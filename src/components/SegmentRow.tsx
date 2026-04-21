@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Segment, Company } from '../types/marketMap'
 import CompanyCard from './CompanyCard'
+import type { ProspectScore } from '../lib/prospecting/scoring'
 
 interface Props {
   segment: Segment
@@ -19,6 +20,7 @@ interface Props {
   dealFlowMap?: Record<string, string>
   onAskAI?: (company: Company) => void
   scoresMap?: Record<string, number>
+  prospectScoresMap?: Record<string, ProspectScore>
   trackingMap?: Record<string, 'viewed' | 'targeted'>
 }
 
@@ -31,7 +33,7 @@ const FOUNDED_RANGES: Record<string, (y: number) => boolean> = {
   '2023+':       y => y >= 2023,
 }
 
-export default function SegmentRow({ segment, sector, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, dealFlowMap, onAskAI, scoresMap, trackingMap }: Props) {
+export default function SegmentRow({ segment, sector, onCompanyClick, watchlistIds, onToggleWatchlist, stageFilter, headcountFilter, hqFilter, momentumFilter, foundedFilter, investorFilter, companySearch, dealFlowMap, onAskAI, scoresMap, prospectScoresMap, trackingMap }: Props) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const navigate = useNavigate()
 
@@ -109,6 +111,7 @@ export default function SegmentRow({ segment, sector, onCompanyClick, watchlistI
                 dealStatus={dealFlowMap?.[company.id]}
                 onAskAI={onAskAI}
                 score={scoresMap?.[company.id]}
+                prospectScore={prospectScoresMap?.[company.id]}
                 trackingStatus={trackingMap?.[company.id]}
               />
             ))}
