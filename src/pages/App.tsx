@@ -72,7 +72,6 @@ export default function AppPage() {
   const [investorFilter,  setInvestorFilter]   = useState<string[]>([])
   const [companySearch,   setCompanySearch]    = useState('')
   const [showFilters,     setShowFilters]      = useState(false)
-  const [dbIndustries,    setDbIndustries]     = useState<string[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Search mode
@@ -109,7 +108,6 @@ export default function AppPage() {
     fetchSavedMaps()
     fetchWatchlist()
     fetchDealFlow()
-    fetchIndustries()
     fetchTracking()
     // Restore last map + scores instantly from cached data (no Supabase round trip)
     const cachedMap    = sessionStorage.getItem('terrain_last_map_data')
@@ -199,18 +197,6 @@ export default function AppPage() {
       const map: Record<string, 'viewed' | 'targeted'> = {}
       for (const row of data as { company_id: string; status: 'viewed' | 'targeted' }[]) map[row.company_id] = row.status
       setTrackingMap(map)
-    }
-  }
-
-  async function fetchIndustries() {
-    const { data } = await supabase
-      .from('clay_companies')
-      .select('industry')
-      .not('industry', 'is', null)
-      .limit(5000)
-    if (data) {
-      const unique = Array.from(new Set(data.map((r: { industry: string }) => r.industry))).sort() as string[]
-      setDbIndustries(unique)
     }
   }
 
@@ -640,7 +626,7 @@ export default function AppPage() {
                   </div>
                 </>
               )}
-              <SearchBar onSearch={handleSearch} isLoading={isLoading} industries={dbIndustries} searchMode={searchMode} onModeChange={setSearchMode} />
+              <SearchBar onSearch={handleSearch} isLoading={isLoading} searchMode={searchMode} onModeChange={setSearchMode} />
             </div>
 
             {/* Loading state */}
