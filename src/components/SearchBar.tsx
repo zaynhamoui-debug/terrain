@@ -9,31 +9,51 @@ interface Props {
   onModeChange?: (mode: SearchMode) => void
 }
 
+// Clay uses LinkedIn Industry Codes V2 — these are the 20 root sectors
 const CATEGORY_ORDER = [
-  'Software & IT',
+  'Technology, Information and Media',
   'Financial Services',
-  'Healthcare & Life Sciences',
-  'Climate & Energy',
-  'Media & Entertainment',
-  'Consumer & Retail',
-  'Business Services',
-  'Education & Nonprofits',
-  'Industrial & Manufacturing',
-  'Logistics & Transportation',
+  'Hospitals and Health Care',
+  'Professional Services',
+  'Manufacturing',
+  'Retail',
+  'Consumer Services',
+  'Education',
+  'Transportation, Logistics, Supply Chain and Storage',
+  'Construction',
+  'Administrative and Support Services',
+  'Real Estate and Equipment Rental Services',
+  'Entertainment Providers',
+  'Wholesale',
+  'Utilities',
+  'Oil, Gas, and Mining',
+  'Farming, Ranching, Forestry',
+  'Accommodation Services',
+  'Government Administration',
+  'Holding Companies',
 ]
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'Software & IT':            'text-blue-400   border-blue-400/30   hover:border-blue-400/70   hover:text-blue-300',
-  'Financial Services':       'text-terrain-gold border-terrain-goldBorder/30 hover:border-terrain-goldBorder hover:text-terrain-gold',
-  'Healthcare & Life Sciences':'text-emerald-400 border-emerald-400/30 hover:border-emerald-400/70 hover:text-emerald-300',
-  'Climate & Energy':         'text-green-400   border-green-400/30   hover:border-green-400/70   hover:text-green-300',
-  'Media & Entertainment':    'text-purple-400  border-purple-400/30  hover:border-purple-400/70  hover:text-purple-300',
-  'Consumer & Retail':        'text-pink-400    border-pink-400/30    hover:border-pink-400/70    hover:text-pink-300',
-  'Business Services':        'text-orange-400  border-orange-400/30  hover:border-orange-400/70  hover:text-orange-300',
-  'Education & Nonprofits':   'text-cyan-400    border-cyan-400/30    hover:border-cyan-400/70    hover:text-cyan-300',
-  'Industrial & Manufacturing':'text-stone-400  border-stone-400/30   hover:border-stone-400/70   hover:text-stone-300',
-  'Logistics & Transportation':'text-sky-400    border-sky-400/30     hover:border-sky-400/70     hover:text-sky-300',
-  'Other':                    'text-terrain-muted border-terrain-border hover:border-terrain-subtle hover:text-terrain-text',
+  'Technology, Information and Media':                    'text-blue-400   border-blue-400/30   hover:border-blue-400/70   hover:text-blue-300',
+  'Financial Services':                                   'text-terrain-gold border-terrain-goldBorder/30 hover:border-terrain-goldBorder hover:text-terrain-gold',
+  'Hospitals and Health Care':                            'text-emerald-400 border-emerald-400/30 hover:border-emerald-400/70 hover:text-emerald-300',
+  'Professional Services':                                'text-violet-400  border-violet-400/30  hover:border-violet-400/70  hover:text-violet-300',
+  'Manufacturing':                                        'text-stone-400   border-stone-400/30   hover:border-stone-400/70   hover:text-stone-300',
+  'Retail':                                               'text-pink-400    border-pink-400/30    hover:border-pink-400/70    hover:text-pink-300',
+  'Consumer Services':                                    'text-rose-400    border-rose-400/30    hover:border-rose-400/70    hover:text-rose-300',
+  'Education':                                            'text-cyan-400    border-cyan-400/30    hover:border-cyan-400/70    hover:text-cyan-300',
+  'Transportation, Logistics, Supply Chain and Storage':  'text-sky-400     border-sky-400/30     hover:border-sky-400/70     hover:text-sky-300',
+  'Construction':                                         'text-orange-400  border-orange-400/30  hover:border-orange-400/70  hover:text-orange-300',
+  'Administrative and Support Services':                  'text-slate-400   border-slate-400/30   hover:border-slate-400/70   hover:text-slate-300',
+  'Real Estate and Equipment Rental Services':            'text-amber-400   border-amber-400/30   hover:border-amber-400/70   hover:text-amber-300',
+  'Entertainment Providers':                              'text-purple-400  border-purple-400/30  hover:border-purple-400/70  hover:text-purple-300',
+  'Wholesale':                                            'text-teal-400    border-teal-400/30    hover:border-teal-400/70    hover:text-teal-300',
+  'Utilities':                                            'text-green-400   border-green-400/30   hover:border-green-400/70   hover:text-green-300',
+  'Oil, Gas, and Mining':                                 'text-yellow-400  border-yellow-400/30  hover:border-yellow-400/70  hover:text-yellow-300',
+  'Farming, Ranching, Forestry':                          'text-lime-400    border-lime-400/30    hover:border-lime-400/70    hover:text-lime-300',
+  'Accommodation Services':                               'text-indigo-400  border-indigo-400/30  hover:border-indigo-400/70  hover:text-indigo-300',
+  'Government Administration':                            'text-red-400     border-red-400/30     hover:border-red-400/70     hover:text-red-300',
+  'Holding Companies':                                    'text-terrain-muted border-terrain-border hover:border-terrain-subtle hover:text-terrain-text',
 }
 
 // ─── Custom search field options (Clay-style) ────────────────────────────────
@@ -141,7 +161,7 @@ export default function SearchBar({ onSearch, isLoading, searchMode = 'market', 
               <input
                 value={custom.vertical}
                 onChange={e => setCustom(p => ({ ...p, vertical: e.target.value }))}
-                placeholder="e.g. B2B SaaS, Vertical SaaS, Construction Tech, HealthTech…"
+                placeholder="e.g. Technology, Financial Services, Hospitals and Health Care…"
                 className="w-full bg-terrain-bg border border-terrain-border rounded px-4 py-2.5 text-terrain-text text-sm font-mono placeholder-terrain-muted/50 focus:outline-none focus:border-terrain-gold transition-colors"
               />
             </div>
