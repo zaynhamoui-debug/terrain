@@ -13,8 +13,8 @@ export class HarmonicClient {
     const all: ProspectCompany[] = []
     let nextCursor: string | null = null
 
-    // Paginate up to 5 pages (~250 companies per saved search)
-    for (let page = 0; page < 5; page++) {
+    // Single page per call — keeps invocation within 60s budget
+    for (let page = 0; page < 1; page++) {
       const url = nextCursor
         ? `${this.baseUrl}/savedSearches:results/${savedSearchId}?page_token=${encodeURIComponent(nextCursor)}`
         : `${this.baseUrl}/savedSearches:results/${savedSearchId}`

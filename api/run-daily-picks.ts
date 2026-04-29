@@ -14,7 +14,7 @@ const SAVED_SEARCH_IDS     = [
   parseInt(process.env.HARMONIC_SIGNALS_ID         ?? '171136'),  // Texas Pre-Seed/Seed Since 2020
 ]
 const PUBLISH_LIMIT   = 10
-const RATIONALE_LIMIT = 20
+const RATIONALE_LIMIT = 5
 const CLAY_BATCH      = 80   // pulled + scored per run — small enough to fit in 60s
 
 // ─── Clay helpers ─────────────────────────────────────────────────────────────
