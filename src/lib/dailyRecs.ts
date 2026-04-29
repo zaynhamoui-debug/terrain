@@ -201,16 +201,32 @@ Use web search to verify each company's website and traction before including th
 
 // ─── Anthropic web-search call ────────────────────────────────────────────────
 
+function extractJsonArray(text: string): RecCompany[] | null {
+  // Strip markdown code fences if present
+  const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '')
+  const start = stripped.indexOf('[')
+  const end   = stripped.lastIndexOf(']')
+  if (start === -1 || end <= start) return null
+  try {
+    return JSON.parse(stripped.slice(start, end + 1)) as RecCompany[]
+  } catch {
+    return null
+  }
+}
+
 async function callWithWebSearch(prompt: string): Promise<RecCompany[]> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const headers = {
+    'x-api-key':                                 API_KEY,
+    'anthropic-version':                         '2023-06-01',
+    'anthropic-beta':                            'web-search-2025-03-05',
+    'anthropic-dangerous-direct-browser-access': 'true',
+    'content-type':                              'application/json',
+  }
+
+  // ── Attempt 1: web search + JSON in one pass ────────────────────────────────
+  const res1 = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: {
-      'x-api-key':                                 API_KEY,
-      'anthropic-version':                         '2023-06-01',
-      'anthropic-beta':                            'web-search-2025-03-05',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      'content-type':                              'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model:      'claude-sonnet-4-6',
       max_tokens: 4000,
@@ -220,24 +236,60 @@ async function callWithWebSearch(prompt: string): Promise<RecCompany[]> {
     }),
   })
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? `API error ${res.status}`)
+  if (!res1.ok) {
+    const err = await res1.json().catch(() => ({}))
+    throw new Error((err as { error?: { message?: string } }).error?.message ?? `API error ${res1.status}`)
   }
 
-  const data = await res.json()
-  const textBlock = [...(data.content ?? [])].reverse().find(
+  const data1 = await res1.json()
+  const textBlock1 = [...(data1.content ?? [])].reverse().find(
     (b: { type: string; text?: string }) => b.type === 'text' && b.text
   ) as { type: string; text: string } | undefined
 
-  if (!textBlock?.text) throw new Error('No text in API response')
+  if (textBlock1?.text) {
+    const parsed = extractJsonArray(textBlock1.text)
+    if (parsed && parsed.length > 0) return parsed
+  }
 
-  const raw = textBlock.text
-  const start = raw.indexOf('[')
-  const end   = raw.lastIndexOf(']')
-  if (start === -1 || end <= start) throw new Error('No JSON array in response')
+  // ── Attempt 2: ask Claude to emit only the JSON from what it already found ──
+  // Collect all text blocks from attempt 1 as context
+  const allText = (data1.content ?? [])
+    .filter((b: { type: string; text?: string }) => b.type === 'text' && b.text)
+    .map((b: { type: string; text?: string }) => b.text)
+    .join('\n')
 
-  return JSON.parse(raw.slice(start, end + 1)) as RecCompany[]
+  const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':                                 API_KEY,
+      'anthropic-version':                         '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'content-type':                              'application/json',
+    },
+    body: JSON.stringify({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 3000,
+      system:     'You convert research notes into a strict JSON array. Output ONLY the JSON array — no markdown, no explanation. Start with [ and end with ].',
+      messages: [{
+        role:    'user',
+        content: `Convert the following research into a JSON array of exactly 5 companies matching this schema:\n{"name":"","website":"","linkedin":null,"industry":"","stage":"","tagline":"","why_mucker":"","founded":null,"location":""}\n\nResearch:\n${allText.slice(0, 6000)}`,
+      }],
+    }),
+  })
+
+  if (!res2.ok) throw new Error('Failed to load picks — please try again')
+
+  const data2 = await res2.json()
+  const textBlock2 = data2.content?.find(
+    (b: { type: string; text?: string }) => b.type === 'text'
+  ) as { type: string; text: string } | undefined
+
+  if (!textBlock2?.text) throw new Error('Failed to load picks — please try again')
+
+  const parsed2 = extractJsonArray(textBlock2.text)
+  if (parsed2 && parsed2.length > 0) return parsed2
+
+  throw new Error('Failed to load picks — please try again')
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
