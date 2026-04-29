@@ -6,6 +6,7 @@ import type { FeedbackEntry } from './dailyRecs'
 
 export interface PickCompany {
   pickId:      string
+  companyId?:  string          // set for pipeline candidates
   rank:        number
   // Company fields
   name:        string
@@ -241,6 +242,142 @@ export function reRankByPreferences(
     const bCombined = b.score.combinedScore + bBoost * 5
     return bCombined - aCombined
   })
+}
+
+// ─── Full pipeline candidates (all companies from latest run) ─────────────────
+
+export async function getLatestPipelineCandidates(): Promise<PickCompany[] | null> {
+  // Get the most recent completed run
+  const { data: run } = await supabase
+    .from('prospecting_runs')
+    .select('id')
+    .eq('status', 'completed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (!run) return null
+
+  const { data, error } = await supabase
+    .from('prospecting_candidates')
+    .select(`
+      id,
+      company_id,
+      mqs,
+      mus,
+      combined_score,
+      recommendation,
+      rationale,
+      mucker_lens,
+      prospecting_companies (
+        name,
+        website,
+        domain,
+        description,
+        sector,
+        stage,
+        location,
+        founded_year,
+        employee_count,
+        total_raised_usd,
+        investors
+      )
+    `)
+    .eq('run_id', run.id)
+    .order('combined_score', { ascending: false })
+
+  if (error || !data) return null
+
+  return data.map((row, idx) => {
+    const cand = row as unknown as Record<string, unknown>
+    const comp = (cand.prospecting_companies ?? {}) as Record<string, unknown>
+    const lens = (cand.mucker_lens as Record<string, unknown>) ?? {}
+
+    const score: ProspectScore = {
+      mqs:           Number(cand.mqs),
+      mus:           Number(cand.mus),
+      combinedScore: Number(cand.combined_score),
+      recommendation: (cand.recommendation as ProspectScore['recommendation']) ?? 'watch',
+      muckerLens: {
+        whyMucker:         (lens.whyMucker        as string[]) ?? [],
+        mainRisks:         (lens.mainRisks         as string[]) ?? [],
+        suggestedNextStep: (lens.suggestedNextStep as string)  ?? '',
+      },
+    }
+
+    const domain  = comp.domain  ? String(comp.domain)  : null
+    const website = comp.website ? String(comp.website) : domain ? `https://${domain}` : null
+
+    return {
+      pickId:        String(cand.id),
+      companyId:     cand.company_id ? String(cand.company_id) : undefined,
+      rank:          idx + 1,
+      name:          String(comp.name ?? ''),
+      website,
+      linkedin:      null,
+      description:   comp.description  ? String(comp.description)  : null,
+      sector:        comp.sector       ? String(comp.sector)       : null,
+      stage:         comp.stage        ? String(comp.stage)        : null,
+      location:      comp.location     ? String(comp.location)     : null,
+      foundedYear:   comp.founded_year  ? Number(comp.founded_year)  : null,
+      employeeCount: comp.employee_count ? Number(comp.employee_count) : null,
+      totalRaisedUsd: comp.total_raised_usd ? Number(comp.total_raised_usd) : null,
+      investors:     Array.isArray(comp.investors) ? comp.investors as string[] : [],
+      rationale:     cand.rationale ? String(cand.rationale) : null,
+      score,
+    }
+  })
+}
+
+// Submit feedback for pipeline candidates (stored in rec_feedback by company name)
+export async function submitCandidateFeedback(
+  userId: string,
+  pick: PickCompany,
+  label: PickFeedbackLabel,
+): Promise<void> {
+  await supabase.from('rec_feedback').upsert(
+    {
+      user_id:      userId,
+      company_name: pick.name,
+      company_data: {
+        name:      pick.name,
+        website:   pick.website,
+        linkedin:  pick.linkedin,
+        industry:  pick.sector,
+        stage:     pick.stage,
+        tagline:   pick.description,
+        why_mucker: pick.rationale,
+        founded:   pick.foundedYear,
+        location:  pick.location,
+      },
+      liked:  label === 'like' || label === 'intro_requested',
+      rating: label === 'intro_requested' ? 3
+             : label === 'like'           ? 2
+             : label === 'already_known'  ? 1
+             : 0,
+      tags: [],
+    },
+    { onConflict: 'user_id,company_name' }
+  )
+}
+
+// Fetch existing pipeline feedback keyed by company name
+export async function getPipelineFeedbackMap(userId: string): Promise<Record<string, PickFeedbackLabel>> {
+  const { data } = await supabase
+    .from('rec_feedback')
+    .select('company_name, rating, liked')
+    .eq('user_id', userId)
+
+  const map: Record<string, PickFeedbackLabel> = {}
+  for (const row of data ?? []) {
+    if (!row.company_name) continue
+    const rating: number = row.rating ?? (row.liked ? 2 : 0)
+    map[row.company_name] = rating >= 3 ? 'intro_requested'
+      : rating >= 2 ? 'like'
+      : rating >= 1 ? 'already_known'
+      : 'not_relevant'
+  }
+  return map
 }
 
 export function formatRaised(usd: number | null): string {

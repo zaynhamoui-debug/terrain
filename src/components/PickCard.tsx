@@ -8,6 +8,7 @@ interface Props {
   feedback?:  PickFeedbackLabel
   userId?:    string
   onFeedback: (label: PickFeedbackLabel) => void
+  onSelect?:  () => void
 }
 
 const REC_BADGE: Record<string, { label: string; cls: string }> = {
@@ -129,7 +130,7 @@ function StructuredNoteForm({ pickId, userId }: { pickId: string; userId: string
   )
 }
 
-export default function PickCard({ pick, feedback, userId, onFeedback }: Props) {
+export default function PickCard({ pick, feedback, userId, onFeedback, onSelect }: Props) {
   const [showLens, setShowLens] = useState(false)
 
   const stageClass = STAGE_STYLES[pick.stage ?? ''] ?? 'bg-slate-900 text-slate-400 border-slate-700'
@@ -155,7 +156,12 @@ export default function PickCard({ pick, feedback, userId, onFeedback }: Props) 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className="text-terrain-muted text-[10px] font-mono shrink-0">#{pick.rank}</span>
-            <span className="font-display text-base font-bold text-terrain-text">{pick.name}</span>
+            <button
+              onClick={onSelect}
+              className={`font-display text-base font-bold text-terrain-text ${onSelect ? 'hover:text-terrain-gold transition-colors cursor-pointer' : ''}`}
+            >
+              {pick.name}
+            </button>
             {pick.stage && (
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${stageClass}`}>
                 {pick.stage}

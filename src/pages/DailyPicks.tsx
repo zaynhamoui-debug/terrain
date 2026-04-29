@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import {
@@ -11,8 +11,11 @@ import {
 } from '../lib/dailyRecs'
 import {
   getTodayPicksFromDB,
+  getLatestPipelineCandidates,
   submitPickFeedback,
+  submitCandidateFeedback,
   getUserFeedbackMap,
+  getPipelineFeedbackMap,
   getTotalFeedbackCount,
   formatRaised,
   type PickCompany,
@@ -20,6 +23,7 @@ import {
 } from '../lib/prospectingPicks'
 import RecCompanyCard from '../components/RecCompanyCard'
 import PickCard from '../components/PickCard'
+import CompanyDrawer from '../components/CompanyDrawer'
 
 const LOADING_MESSAGES = [
   'Scouting the web for startups…',
@@ -31,31 +35,54 @@ const LOADING_MESSAGES = [
   'Finalising top picks…',
 ]
 
+type SortKey = 'rank' | 'mqs' | 'mus' | 'fit'
+type View    = 'picks' | 'pipeline'
+
+function sortPicks(picks: PickCompany[], key: SortKey, dir: 'asc' | 'desc'): PickCompany[] {
+  return [...picks].sort((a, b) => {
+    const av = key === 'rank' ? a.rank : key === 'mqs' ? a.score.mqs : key === 'mus' ? a.score.mus : a.score.combinedScore
+    const bv = key === 'rank' ? b.rank : key === 'mqs' ? b.score.mqs : key === 'mus' ? b.score.mus : b.score.combinedScore
+    return dir === 'asc' ? av - bv : bv - av
+  })
+}
+
 export default function DailyPicks() {
   const navigate = useNavigate()
   const [userId,    setUserId]    = useState<string | null>(null)
 
   // Pre-computed Harmonic picks (primary)
-  const [picks,          setPicks]          = useState<PickCompany[] | null>(null)
-  const [pickFeedback,   setPickFeedback]   = useState<Record<string, PickFeedbackLabel>>({})
-  const [totalFeedback,  setTotalFeedback]  = useState(0)
-  const [recalibToast,   setRecalibToast]   = useState(false)
+  const [picks,         setPicks]         = useState<PickCompany[] | null>(null)
+  const [pickFeedback,  setPickFeedback]  = useState<Record<string, PickFeedbackLabel>>({})
+  const [totalFeedback, setTotalFeedback] = useState(0)
+  const [recalibToast,  setRecalibToast]  = useState(false)
+
+  // Pipeline (all candidates)
+  const [pipeline,           setPipeline]           = useState<PickCompany[] | null>(null)
+  const [pipelineLoading,    setPipelineLoading]    = useState(false)
+  const [pipelineFeedback,   setPipelineFeedback]   = useState<Record<string, PickFeedbackLabel>>({})
 
   // On-demand Claude picks (fallback)
   const [companies, setCompanies] = useState<RecCompany[]>([])
   const [feedback,  setFeedback]  = useState<Record<string, FeedbackEntry>>({})
 
-  const [source,    setSource]    = useState<'harmonic' | 'claude' | null>(null)
-  const [loading,   setLoading]   = useState(true)
-  const [msgIdx,    setMsgIdx]    = useState(0)
-  const [error,     setError]     = useState<string | null>(null)
-  const [isRegen,   setIsRegen]   = useState(false)
+  // View / sort state
+  const [view,    setView]    = useState<View>('picks')
+  const [sortKey, setSortKey] = useState<SortKey>('rank')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  // Detail drawer
+  const [selected, setSelected] = useState<PickCompany | null>(null)
+
+  const [source,  setSource]  = useState<'harmonic' | 'claude' | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [msgIdx,  setMsgIdx]  = useState(0)
+  const [error,   setError]   = useState<string | null>(null)
+  const [isRegen, setIsRegen] = useState(false)
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
 
-  // Cycle loading messages
   useEffect(() => {
     if (!loading && !isRegen) return
     const id = setInterval(() => setMsgIdx(i => (i + 1) % LOADING_MESSAGES.length), 2200)
@@ -69,7 +96,6 @@ export default function DailyPicks() {
       setUserId(uid)
 
       try {
-        // 1. Try pre-computed Harmonic picks first
         const [dbPicks, allFeedback, totalCount] = await Promise.all([
           getTodayPicksFromDB(),
           getUserFeedbackMap(uid),
@@ -79,12 +105,12 @@ export default function DailyPicks() {
         setTotalFeedback(totalCount)
 
         if (dbPicks && dbPicks.length > 0) {
-          // Sort: unreviewed first, reviewed to bottom
+          // Default sort: unreviewed first, then by rank
           const sorted = [...dbPicks].sort((a, b) => {
-            const aReviewed = !!allFeedback[a.pickId]
-            const bReviewed = !!allFeedback[b.pickId]
-            if (aReviewed === bReviewed) return a.rank - b.rank
-            return aReviewed ? 1 : -1
+            const aR = !!allFeedback[a.pickId]
+            const bR = !!allFeedback[b.pickId]
+            if (aR === bR) return a.rank - b.rank
+            return aR ? 1 : -1
           })
           setPicks(sorted)
           setSource('harmonic')
@@ -92,7 +118,7 @@ export default function DailyPicks() {
           return
         }
 
-        // 2. Fall back to on-demand Claude web search
+        // Fall back to Claude web search
         const [cached, fbMap] = await Promise.all([
           getTodayRecs(uid),
           getFeedbackMap(uid),
@@ -114,6 +140,52 @@ export default function DailyPicks() {
     })
   }, [navigate])
 
+  // Load pipeline candidates when tab switches to 'pipeline'
+  useEffect(() => {
+    if (view !== 'pipeline' || pipeline !== null || pipelineLoading) return
+    if (!userId) return
+
+    setPipelineLoading(true)
+    Promise.all([
+      getLatestPipelineCandidates(),
+      getPipelineFeedbackMap(userId),
+    ]).then(([candidates, fbMap]) => {
+      if (candidates) setPipeline(candidates)
+      setPipelineFeedback(fbMap)
+    }).finally(() => setPipelineLoading(false))
+  }, [view, pipeline, pipelineLoading, userId])
+
+  function handleSortClick(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'rank' ? 'asc' : 'desc')
+    }
+  }
+
+  // ── Derived: sorted lists ───────────────────────────────────────────────────
+
+  const sortedPicks = useMemo(() => {
+    if (!picks) return []
+    return sortPicks(picks, sortKey, sortDir)
+  }, [picks, sortKey, sortDir])
+
+  const sortedPipeline = useMemo(() => {
+    if (!pipeline) return []
+    return sortPicks(pipeline, sortKey, sortDir)
+  }, [pipeline, sortKey, sortDir])
+
+  // ── Feedback on selected company (for drawer) ───────────────────────────────
+
+  const selectedFeedback = selected
+    ? view === 'pipeline'
+      ? pipelineFeedback[selected.name]
+      : pickFeedback[selected.pickId]
+    : undefined
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
   async function handleFeedback(company: RecCompany, entry: FeedbackEntry) {
     if (!userId) return
     setFeedback(prev => ({ ...prev, [company.name]: entry }))
@@ -132,12 +204,13 @@ export default function DailyPicks() {
     if (!userId) return
     const isNew = !pickFeedback[pick.pickId]
     setPickFeedback(prev => ({ ...prev, [pick.pickId]: label }))
+    // Sync drawer feedback if this pick is selected
+    if (selected?.pickId === pick.pickId) setSelected({ ...pick })
     await submitPickFeedback(userId, pick, label)
 
     if (isNew) {
       const newCount = totalFeedback + 1
       setTotalFeedback(newCount)
-
       if (shouldRecalibrate(newCount)) {
         try {
           await fetch('/api/recalibrate-scores', {
@@ -146,10 +219,23 @@ export default function DailyPicks() {
           })
           setRecalibToast(true)
           setTimeout(() => setRecalibToast(false), 5000)
-        } catch {
-          // Silent — recalibration is best-effort
-        }
+        } catch { /* silent */ }
       }
+    }
+  }
+
+  async function handlePipelineFeedback(pick: PickCompany, label: PickFeedbackLabel) {
+    if (!userId) return
+    setPipelineFeedback(prev => ({ ...prev, [pick.name]: label }))
+    await submitCandidateFeedback(userId, pick, label)
+  }
+
+  async function handleDrawerFeedback(label: PickFeedbackLabel) {
+    if (!selected) return
+    if (view === 'pipeline') {
+      await handlePipelineFeedback(selected, label)
+    } else {
+      await handlePickFeedback(selected, label)
     }
   }
 
@@ -168,13 +254,22 @@ export default function DailyPicks() {
     }
   }
 
-  const isHarmonic    = source === 'harmonic'
-  const displayCount  = isHarmonic ? (picks?.length ?? 0) : companies.length
+  const isHarmonic   = source === 'harmonic'
+  const displayCount = isHarmonic ? (picks?.length ?? 0) : companies.length
 
   const nextMilestone = totalFeedback < RECALIB_THRESHOLD
     ? RECALIB_THRESHOLD
     : RECALIB_THRESHOLD + Math.ceil((totalFeedback - RECALIB_THRESHOLD + 1) / RECALIB_STEP) * RECALIB_STEP
   const progressPct = Math.min(100, Math.round((totalFeedback / nextMilestone) * 100))
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const SORT_BUTTONS: Array<{ key: SortKey; label: string }> = [
+    { key: 'rank', label: 'Rank' },
+    { key: 'mqs',  label: 'MQS' },
+    { key: 'mus',  label: 'MUS' },
+    { key: 'fit',  label: 'Fit' },
+  ]
 
   return (
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
@@ -242,18 +337,15 @@ export default function DailyPicks() {
       <main className="max-w-4xl mx-auto px-6 py-10">
         {/* Title */}
         <div className="mb-8">
-          <h2 className="font-display text-2xl font-bold text-terrain-text mb-1">
-            Today's Picks
-          </h2>
+          <h2 className="font-display text-2xl font-bold text-terrain-text mb-1">Today's Picks</h2>
           <p className="text-terrain-muted text-xs font-mono">{today}</p>
 
           {!loading && displayCount > 0 && (
-            <div className="flex flex-col gap-2 mt-2">
+            <div className="flex flex-col gap-3 mt-3">
               <div className="flex items-center gap-3 flex-wrap">
                 <p className="text-terrain-muted text-xs font-mono">
                   {displayCount} startups scouted to match Mucker Capital's thesis
                 </p>
-                {/* Source badge */}
                 <span className={`text-[9px] font-mono px-2 py-0.5 rounded border uppercase tracking-widest ${
                   isHarmonic
                     ? 'border-terrain-goldBorder bg-terrain-goldDim text-terrain-gold'
@@ -283,6 +375,53 @@ export default function DailyPicks() {
           )}
         </div>
 
+        {/* View toggle + sort — only for Harmonic picks */}
+        {!loading && !isRegen && isHarmonic && picks && picks.length > 0 && (
+          <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+            {/* View tabs */}
+            <div className="flex items-center gap-1 bg-terrain-surface border border-terrain-border rounded-lg p-1">
+              <button
+                onClick={() => setView('picks')}
+                className={`px-3 py-1 rounded text-[11px] font-mono uppercase tracking-widest transition-colors ${
+                  view === 'picks'
+                    ? 'bg-terrain-gold text-terrain-bg font-bold'
+                    : 'text-terrain-muted hover:text-terrain-text'
+                }`}
+              >
+                Today's Picks ({picks.length})
+              </button>
+              <button
+                onClick={() => setView('pipeline')}
+                className={`px-3 py-1 rounded text-[11px] font-mono uppercase tracking-widest transition-colors ${
+                  view === 'pipeline'
+                    ? 'bg-terrain-gold text-terrain-bg font-bold'
+                    : 'text-terrain-muted hover:text-terrain-text'
+                }`}
+              >
+                Full Pipeline {pipeline ? `(${pipeline.length})` : ''}
+              </button>
+            </div>
+
+            {/* Sort controls */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-mono text-terrain-muted uppercase tracking-widest mr-0.5">Sort</span>
+              {SORT_BUTTONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => handleSortClick(key)}
+                  className={`px-2.5 py-1 rounded border text-[10px] font-mono transition-colors ${
+                    sortKey === key
+                      ? 'bg-terrain-goldDim border-terrain-goldBorder text-terrain-gold'
+                      : 'border-terrain-border text-terrain-muted hover:border-terrain-subtle hover:text-terrain-text'
+                  }`}
+                >
+                  {label}{sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Loading */}
         {(loading || isRegen) && (
           <div className="flex flex-col items-center justify-center py-24 gap-6">
@@ -295,6 +434,14 @@ export default function DailyPicks() {
                 Web search takes 20–40 seconds
               </p>
             )}
+          </div>
+        )}
+
+        {/* Pipeline loading */}
+        {view === 'pipeline' && pipelineLoading && (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-5 h-5 border-2 border-terrain-gold border-t-transparent rounded-full animate-spin" />
+            <span className="ml-3 text-xs font-mono text-terrain-muted">Loading pipeline…</span>
           </div>
         )}
 
@@ -314,10 +461,10 @@ export default function DailyPicks() {
           </div>
         )}
 
-        {/* Harmonic pre-computed picks */}
-        {!loading && !isRegen && isHarmonic && picks && picks.length > 0 && (
+        {/* ── Today's Picks view ── */}
+        {!loading && !isRegen && isHarmonic && view === 'picks' && sortedPicks.length > 0 && (
           <div className="flex flex-col gap-4">
-            {picks.map(pick => {
+            {sortedPicks.map(pick => {
               const isReviewed = !!pickFeedback[pick.pickId]
               return (
                 <div key={pick.pickId} className={isReviewed ? 'opacity-60' : undefined}>
@@ -331,6 +478,36 @@ export default function DailyPicks() {
                     feedback={pickFeedback[pick.pickId]}
                     userId={userId ?? undefined}
                     onFeedback={label => handlePickFeedback(pick, label)}
+                    onSelect={() => setSelected(pick)}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── Full Pipeline view ── */}
+        {!loading && !isRegen && isHarmonic && view === 'pipeline' && !pipelineLoading && sortedPipeline.length > 0 && (
+          <div className="flex flex-col gap-4">
+            <p className="text-[10px] font-mono text-terrain-muted/60 mb-1">
+              All {sortedPipeline.length} companies from this run, sorted by score. Click a name to see full details.
+            </p>
+            {sortedPipeline.map(pick => {
+              const fb = pipelineFeedback[pick.name]
+              const isReviewed = !!fb
+              return (
+                <div key={pick.pickId} className={isReviewed ? 'opacity-60' : undefined}>
+                  {isReviewed && (
+                    <div className="flex items-center gap-1.5 mb-1.5 ml-1">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">✓ Reviewed</span>
+                    </div>
+                  )}
+                  <PickCard
+                    pick={pick}
+                    feedback={fb}
+                    userId={userId ?? undefined}
+                    onFeedback={label => handlePipelineFeedback(pick, label)}
+                    onSelect={() => setSelected(pick)}
                   />
                 </div>
               )
@@ -361,6 +538,16 @@ export default function DailyPicks() {
           </p>
         )}
       </main>
+
+      {/* Detail drawer */}
+      {selected && (
+        <CompanyDrawer
+          pick={selected}
+          feedback={selectedFeedback}
+          onClose={() => setSelected(null)}
+          onFeedback={handleDrawerFeedback}
+        />
+      )}
     </div>
   )
 }
