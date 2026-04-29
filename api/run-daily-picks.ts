@@ -255,7 +255,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status:       'published',
         }))
       )
-      if (pickErr) throw pickErr
+      if (pickErr) throw new Error(`daily_picks insert: ${pickErr.message ?? JSON.stringify(pickErr)}`)
     }
 
     // ── 8. Complete ───────────────────────────────────────────────────────────
