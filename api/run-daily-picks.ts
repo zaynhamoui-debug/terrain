@@ -15,7 +15,7 @@ const SAVED_SEARCH_IDS     = [
 ]
 const PUBLISH_LIMIT   = 10
 const RATIONALE_LIMIT = 20
-const CLAY_BATCH      = 300   // how many Clay companies to pull and score per run
+const CLAY_BATCH      = 80   // pulled + scored per run — small enough to fit in 60s
 
 // ─── Clay helpers ─────────────────────────────────────────────────────────────
 
@@ -34,37 +34,35 @@ function parseHeadcount(h: string | null): number | undefined {
   const range = h.match(/(\d+)\s*[-–]\s*(\d+)/)
   if (range) return Math.round((parseInt(range[1]) + parseInt(range[2])) / 2)
   const single = h.match(/(\d+)\+?/)
-  if (single) return parseInt(single[1])
-  return undefined
+  return single ? parseInt(single[1]) : undefined
 }
 
 function clayToProspect(c: ClayRow): ProspectCompany {
   const raw     = c.website ?? ''
   const website = raw ? (raw.startsWith('http') ? raw : `https://${raw}`) : undefined
-  const domain  = raw.replace(/^https?:\/\//, '').split('/')[0] || undefined
+  const domain  = raw.replace(/^https?:\/\//, '').split('/')[0].toLowerCase() || undefined
   const loc     = [c.location, c.country].filter(Boolean).join(', ') || undefined
   return {
-    name:         c.name,
+    name:          c.name,
     domain,
     website,
-    description:  c.description  ?? undefined,
-    sector:       c.industry     ?? undefined,
-    location:     loc,
+    description:   c.description  ?? undefined,
+    sector:        c.industry     ?? undefined,
+    location:      loc,
     employeeCount: parseHeadcount(c.headcount),
-    investors:    [],
-    founders:     [],
-    rawSource:    { source: 'clay', clay: c },
+    investors:     [],
+    founders:      [],
+    rawSource:     { source: 'clay' },   // omit full clay row to keep payload small
   }
 }
 
-// Rotate through the Clay DB using today's date as an offset seed
 async function fetchClayCompanies(
   supabase: ReturnType<typeof createClient>,
   today: string,
 ): Promise<ProspectCompany[]> {
-  const dateNum = parseInt(today.replace(/-/g, ''), 10)
-  const totalRows = 8000
-  const offset = dateNum % (totalRows - CLAY_BATCH)
+  const dateNum   = parseInt(today.replace(/-/g, ''), 10)
+  const totalRows = 7800
+  const offset    = dateNum % (totalRows - CLAY_BATCH)
 
   const { data, error } = await supabase
     .from('clay_companies')
@@ -77,8 +75,7 @@ async function fetchClayCompanies(
     console.error('Clay fetch error:', error?.message)
     return []
   }
-
-  console.log(`Clay: fetched ${data.length} companies (offset ${offset})`)
+  console.log(`Clay: ${data.length} companies at offset ${offset}`)
   return (data as ClayRow[]).map(clayToProspect)
 }
 
@@ -89,7 +86,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     return res.status(500).json({ error: 'Missing Supabase env vars' })
   }
@@ -99,11 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Idempotency
   const { data: existing } = await supabase
-    .from('daily_picks')
-    .select('id')
-    .eq('pick_date', today)
-    .limit(1)
-
+    .from('daily_picks').select('id').eq('pick_date', today).limit(1)
   if (existing && existing.length > 0 && req.query.force !== '1') {
     return res.status(200).json({ message: `Picks already published for ${today}`, skipped: true })
   }
@@ -119,182 +111,166 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       scoring_version:           'heuristic-v1',
       harmonic_saved_search_ids: useHarmonic ? SAVED_SEARCH_IDS : [],
     })
-    .select('id')
-    .single()
+    .select('id').single()
 
   if (runErr || !runRow) {
     return res.status(500).json({ error: 'Failed to create run record', detail: runErr?.message })
   }
-
   const runId = runRow.id as string
 
   try {
-    // ── Source companies ──────────────────────────────────────────────────────
-    let sourced: Array<{ savedSearchId: number; company: ProspectCompany }> = []
+    // ── 1. Source ─────────────────────────────────────────────────────────────
+    let allCompanies: ProspectCompany[] = []
 
     if (useHarmonic) {
       const harmonic = new HarmonicClient(HARMONIC_API_KEY)
-      for (const savedSearchId of SAVED_SEARCH_IDS) {
+      for (const id of SAVED_SEARCH_IDS) {
         try {
-          const companies = await harmonic.fetchSavedSearchCompanies(savedSearchId)
-          sourced.push(...companies.map(company => ({ savedSearchId, company })))
-          console.log(`Harmonic search ${savedSearchId}: ${companies.length} companies`)
-        } catch (err) {
-          console.error(`Harmonic search ${savedSearchId} failed:`, err)
-        }
+          const cs = await harmonic.fetchSavedSearchCompanies(id)
+          allCompanies.push(...cs)
+          console.log(`Harmonic ${id}: ${cs.length}`)
+        } catch (e) { console.error(`Harmonic ${id} failed:`, e) }
       }
     } else {
-      const clayCompanies = await fetchClayCompanies(supabase, today)
-      sourced = clayCompanies.map(company => ({ savedSearchId: 0, company }))
-      console.log(`Clay source: ${sourced.length} companies`)
+      allCompanies = await fetchClayCompanies(supabase, today)
     }
 
-    if (sourced.length === 0) {
-      throw new Error(`No companies returned from ${source}.`)
-    }
+    if (allCompanies.length === 0) throw new Error(`No companies from ${source}`)
 
-    // ── Deduplicate ───────────────────────────────────────────────────────────
-    const seen = new Map<string, { savedSearchId: number; company: ProspectCompany }>()
-    for (const item of sourced) {
-      const key = (item.company.domain ?? item.company.name).toLowerCase()
-      if (!seen.has(key)) seen.set(key, item)
+    // ── 2. Dedup by domain/name ───────────────────────────────────────────────
+    const seen = new Map<string, ProspectCompany>()
+    for (const c of allCompanies) {
+      const key = (c.domain ?? c.name).toLowerCase()
+      if (!seen.has(key)) seen.set(key, c)
     }
     const deduped = [...seen.values()]
-    console.log(`After dedup: ${deduped.length} unique companies`)
+    console.log(`Deduped: ${deduped.length}`)
 
-    // ── Score ─────────────────────────────────────────────────────────────────
+    // ── 3. Score + sort ───────────────────────────────────────────────────────
     const scored = deduped
-      .map(({ savedSearchId, company }) => ({ savedSearchId, company, score: scoreCompany(company) }))
+      .map(c => ({ company: c, score: scoreCompany(c) }))
       .sort((a, b) => b.score.combinedScore - a.score.combinedScore)
 
-    // ── Generate rationale for top N ──────────────────────────────────────────
-    const topForRationale = scored.slice(0, RATIONALE_LIMIT)
-    const rationaleMap    = await generateRationalesBatch(
-      topForRationale.map(({ company, score }) => ({ company, score }))
+    // ── 4. Rationale for top N ────────────────────────────────────────────────
+    const rationaleMap = await generateRationalesBatch(
+      scored.slice(0, RATIONALE_LIMIT).map(({ company, score }) => ({ company, score }))
     )
-    console.log(`Generated rationale for ${rationaleMap.size} companies`)
+    console.log(`Rationales: ${rationaleMap.size}`)
 
-    // ── Upsert companies + candidates ─────────────────────────────────────────
-    interface Candidate { id: string; companyId: string; combinedScore: number; recommendation: string }
-    const candidates: Candidate[] = []
+    // ── 5. Batch upsert companies ─────────────────────────────────────────────
+    const companyRows = scored.map(({ company }) => ({
+      harmonic_id:           company.harmonicId        || null,
+      name:                  company.name,
+      domain:                company.domain            || null,
+      website:               company.website           || null,
+      description:           company.description       || null,
+      sector:                company.sector            || null,
+      stage:                 company.stage             || null,
+      location:              company.location          || null,
+      founded_year:          company.foundedYear       || null,
+      employee_count:        company.employeeCount     || null,
+      employee_growth_3m:    company.employeeGrowth3m  || null,
+      total_raised_usd:      company.totalRaisedUsd    || null,
+      last_round_amount_usd: company.lastRoundAmountUsd || null,
+      last_round_date:       company.lastRoundDate     || null,
+      investors:             company.investors         ?? [],
+      founders:              company.founders          ?? [],
+      raw_source:            company.rawSource         ?? {},
+      updated_at:            new Date().toISOString(),
+    }))
 
-    for (const { savedSearchId, company, score } of scored) {
-      const conflictCol = company.domain ? 'domain' : 'harmonic_id'
-
-      const { data: compRow, error: compErr } = await supabase
+    // Upsert in chunks of 50 — conflict on name (works for both Clay and Harmonic)
+    const CHUNK = 50
+    const insertedCompanies: Array<{ id: string; name: string }> = []
+    for (let i = 0; i < companyRows.length; i += CHUNK) {
+      const chunk = companyRows.slice(i, i + CHUNK)
+      const { data, error } = await supabase
         .from('prospecting_companies')
-        .upsert(
-          {
-            harmonic_id:           company.harmonicId        || null,
-            name:                  company.name,
-            domain:                company.domain            || null,
-            website:               company.website           || null,
-            description:           company.description       || null,
-            sector:                company.sector            || null,
-            stage:                 company.stage             || null,
-            location:              company.location          || null,
-            founded_year:          company.foundedYear       || null,
-            employee_count:        company.employeeCount     || null,
-            employee_growth_3m:    company.employeeGrowth3m  || null,
-            total_raised_usd:      company.totalRaisedUsd    || null,
-            last_round_amount_usd: company.lastRoundAmountUsd || null,
-            last_round_date:       company.lastRoundDate     || null,
-            investors:             company.investors         ?? [],
-            founders:              company.founders          ?? [],
-            raw_source:            company.rawSource         ?? {},
-            updated_at:            new Date().toISOString(),
-          },
-          { onConflict: conflictCol, ignoreDuplicates: false }
-        )
-        .select('id')
-        .single()
-
-      if (compErr || !compRow) {
-        console.error(`Failed to upsert company ${company.name}:`, compErr?.message)
-        continue
-      }
-
-      const { data: candRow, error: candErr } = await supabase
-        .from('prospecting_candidates')
-        .insert({
-          run_id:                 runId,
-          company_id:             compRow.id,
-          source_saved_search_id: savedSearchId || null,
-          mqs:                    score.mqs,
-          mus:                    score.mus,
-          combined_score:         score.combinedScore,
-          recommendation:         score.recommendation,
-          scoring_breakdown:      { mqsFeatures: {}, musSignals: {} },
-          rationale:              rationaleMap.get(company.name) ?? null,
-          mucker_lens:            score.muckerLens,
-        })
-        .select('id, company_id, combined_score, recommendation')
-        .single()
-
-      if (candErr || !candRow) {
-        console.error(`Failed to insert candidate for ${company.name}:`, candErr?.message)
-        continue
-      }
-
-      candidates.push({
-        id:             candRow.id as string,
-        companyId:      candRow.company_id as string,
-        combinedScore:  candRow.combined_score as number,
-        recommendation: candRow.recommendation as string,
-      })
+        .upsert(chunk, { onConflict: 'name', ignoreDuplicates: false })
+        .select('id, name')
+      if (error) console.error(`Company upsert chunk ${i} error:`, error.message)
+      if (data) insertedCompanies.push(...(data as { id: string; name: string }[]))
     }
 
-    // ── Publish top picks ─────────────────────────────────────────────────────
-    const publishable = candidates
+    // Build name → company_id map
+    const companyIdMap = new Map<string, string>()
+    for (const row of insertedCompanies) companyIdMap.set(row.name.toLowerCase(), row.id)
+
+    // ── 6. Batch insert candidates ────────────────────────────────────────────
+    const candidateRows = scored
+      .map(({ company, score }) => {
+        const companyId = companyIdMap.get(company.name.toLowerCase())
+        if (!companyId) return null
+        return {
+          run_id:            runId,
+          company_id:        companyId,
+          mqs:               score.mqs,
+          mus:               score.mus,
+          combined_score:    score.combinedScore,
+          recommendation:    score.recommendation,
+          scoring_breakdown: { mqsFeatures: {}, musSignals: {} },
+          rationale:         rationaleMap.get(company.name) ?? null,
+          mucker_lens:       score.muckerLens,
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+
+    const { data: candData, error: candErr } = await supabase
+      .from('prospecting_candidates')
+      .insert(candidateRows)
+      .select('id, company_id, combined_score, recommendation')
+
+    if (candErr) throw new Error(`Candidate insert failed: ${candErr.message}`)
+
+    // ── 7. Publish top picks ──────────────────────────────────────────────────
+    const candidates = (candData ?? []) as Array<{
+      id: string; company_id: string; combined_score: number; recommendation: string
+    }>
+
+    let publishable = candidates
       .filter(c => ['strong_pick', 'pick'].includes(c.recommendation))
-      .sort((a, b) => b.combinedScore - a.combinedScore)
+      .sort((a, b) => b.combined_score - a.combined_score)
       .slice(0, PUBLISH_LIMIT)
 
-    // Widen to 'watch' if not enough strong picks from Clay data
+    // Widen to 'watch' if not enough strong picks (common with Clay data)
     if (publishable.length < PUBLISH_LIMIT) {
+      const publishedIds = new Set(publishable.map(p => p.id))
       const extra = candidates
-        .filter(c => c.recommendation === 'watch' && !publishable.find(p => p.id === c.id))
-        .sort((a, b) => b.combinedScore - a.combinedScore)
+        .filter(c => c.recommendation === 'watch' && !publishedIds.has(c.id))
+        .sort((a, b) => b.combined_score - a.combined_score)
         .slice(0, PUBLISH_LIMIT - publishable.length)
-      publishable.push(...extra)
+      publishable = [...publishable, ...extra]
     }
 
     if (publishable.length > 0) {
-      await supabase
-        .from('daily_picks')
-        .update({ status: 'archived' })
-        .eq('pick_date', today)
+      await supabase.from('daily_picks').update({ status: 'archived' }).eq('pick_date', today)
 
-      const pickRows = publishable.map((c, idx) => ({
-        candidate_id: c.id,
-        run_id:       runId,
-        company_id:   c.companyId,
-        pick_date:    today,
-        rank:         idx + 1,
-        status:       'published',
-      }))
-
-      const { error: pickErr } = await supabase.from('daily_picks').insert(pickRows)
+      const { error: pickErr } = await supabase.from('daily_picks').insert(
+        publishable.map((c, idx) => ({
+          candidate_id: c.id,
+          run_id:       runId,
+          company_id:   c.company_id,
+          pick_date:    today,
+          rank:         idx + 1,
+          status:       'published',
+        }))
+      )
       if (pickErr) throw pickErr
     }
 
-    // ── Complete run ──────────────────────────────────────────────────────────
-    await supabase
-      .from('prospecting_runs')
-      .update({
-        status:        'completed',
-        completed_at:  new Date().toISOString(),
-        source_counts: { source, sourced: sourced.length, deduped: deduped.length, scored: scored.length, published: publishable.length },
-      })
-      .eq('id', runId)
+    // ── 8. Complete ───────────────────────────────────────────────────────────
+    await supabase.from('prospecting_runs').update({
+      status:        'completed',
+      completed_at:  new Date().toISOString(),
+      source_counts: { source, sourced: allCompanies.length, deduped: deduped.length, published: publishable.length },
+    }).eq('id', runId)
 
-    console.log(`Run ${runId} complete [${source}]: ${publishable.length} picks published for ${today}`)
-
-    return res.status(200).json({ runId, date: today, source, sourced: sourced.length, deduped: deduped.length, published: publishable.length })
+    console.log(`Run ${runId} [${source}]: ${publishable.length} picks for ${today}`)
+    return res.status(200).json({ runId, date: today, source, sourced: allCompanies.length, deduped: deduped.length, published: publishable.length })
 
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('Daily picks run failed:', msg)
+    console.error('Run failed:', msg)
     await supabase.from('prospecting_runs').update({ status: 'failed', error_summary: msg }).eq('id', runId)
     return res.status(500).json({ error: msg })
   }

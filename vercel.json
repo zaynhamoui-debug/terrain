@@ -4,5 +4,9 @@
       "path": "/api/run-daily-picks",
       "schedule": "0 14 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/run-daily-picks.ts": { "maxDuration": 60 },
+    "api/recalibrate-scores.ts": { "maxDuration": 30 }
+  }
 }
