@@ -10,8 +10,8 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 const HARMONIC_API_KEY     = process.env.HARMONIC_API_KEY          ?? ''
 const CRON_SECRET          = process.env.CRON_SECRET               ?? ''
 const SAVED_SEARCH_IDS     = [
-  parseInt(process.env.HARMONIC_DAILY_DISCOVERY_ID ?? '172255'),
-  parseInt(process.env.HARMONIC_SIGNALS_ID         ?? '172257'),
+  parseInt(process.env.HARMONIC_DAILY_DISCOVERY_ID ?? '122197'),  // Mucker Base API Search
+  parseInt(process.env.HARMONIC_SIGNALS_ID         ?? '171136'),  // Texas Pre-Seed/Seed Since 2020
 ]
 const PUBLISH_LIMIT   = 10
 const RATIONALE_LIMIT = 20
