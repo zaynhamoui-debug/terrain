@@ -243,7 +243,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (publishable.length > 0) {
-      await supabase.from('daily_picks').update({ status: 'archived' }).eq('pick_date', today)
+      // Delete any existing picks for today (handles force reruns cleanly)
+      await supabase.from('daily_picks').delete().eq('pick_date', today)
 
       const { error: pickErr } = await supabase.from('daily_picks').insert(
         publishable.map((c, idx) => ({
