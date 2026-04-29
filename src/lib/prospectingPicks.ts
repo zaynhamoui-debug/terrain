@@ -158,6 +158,67 @@ export async function submitPickFeedback(
 // ─── Personalise ordering by user feedback profile ──────────────────────────
 // Re-ranks picks based on the user's sector preferences without any API call.
 
+// ─── Structured notes ────────────────────────────────────────────────────────
+
+export interface StructuredNotes {
+  market_note?:         string
+  team_note?:           string
+  traction_note?:       string
+  business_model_note?: string
+  under_radar_note?:    string
+  risks_note?:          string
+}
+
+export async function saveStructuredNotes(
+  userId: string,
+  pickId: string,
+  notes: StructuredNotes,
+): Promise<void> {
+  await supabase.from('prospecting_feedback').upsert(
+    {
+      daily_pick_id:    pickId,
+      user_id:          userId,
+      structured_notes: notes,
+    },
+    { onConflict: 'daily_pick_id,user_id' }
+  )
+}
+
+// ─── Full feedback history (across all sessions) ──────────────────────────────
+
+export async function getUserFeedbackMap(
+  userId: string,
+): Promise<Record<string, PickFeedbackLabel>> {
+  const { data } = await supabase
+    .from('prospecting_feedback')
+    .select('daily_pick_id, label')
+    .eq('user_id', userId)
+    .not('label', 'is', null)
+
+  if (!data) return {}
+
+  const map: Record<string, PickFeedbackLabel> = {}
+  for (const row of data) {
+    if (row.daily_pick_id && row.label) {
+      map[row.daily_pick_id] = row.label as PickFeedbackLabel
+    }
+  }
+  return map
+}
+
+// ─── Total feedback count for recalibration trigger ───────────────────────────
+
+export async function getTotalFeedbackCount(userId: string): Promise<number> {
+  const { count } = await supabase
+    .from('prospecting_feedback')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+  return count ?? 0
+}
+
+// ─── Personalise ordering by user feedback profile ──────────────────────────
+// Re-ranks picks based on the user's sector preferences without any API call.
+
 export function reRankByPreferences(
   picks: PickCompany[],
   feedbackMap: Record<string, FeedbackEntry>,

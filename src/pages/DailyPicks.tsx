@@ -12,6 +12,8 @@ import {
 import {
   getTodayPicksFromDB,
   submitPickFeedback,
+  getUserFeedbackMap,
+  getTotalFeedbackCount,
   formatRaised,
   type PickCompany,
   type PickFeedbackLabel,
@@ -34,8 +36,10 @@ export default function DailyPicks() {
   const [userId,    setUserId]    = useState<string | null>(null)
 
   // Pre-computed Harmonic picks (primary)
-  const [picks,     setPicks]     = useState<PickCompany[] | null>(null)
-  const [pickFeedback, setPickFeedback] = useState<Record<string, PickFeedbackLabel>>({})
+  const [picks,          setPicks]          = useState<PickCompany[] | null>(null)
+  const [pickFeedback,   setPickFeedback]   = useState<Record<string, PickFeedbackLabel>>({})
+  const [totalFeedback,  setTotalFeedback]  = useState(0)
+  const [recalibToast,   setRecalibToast]   = useState(false)
 
   // On-demand Claude picks (fallback)
   const [companies, setCompanies] = useState<RecCompany[]>([])
@@ -66,9 +70,23 @@ export default function DailyPicks() {
 
       try {
         // 1. Try pre-computed Harmonic picks first
-        const dbPicks = await getTodayPicksFromDB()
+        const [dbPicks, allFeedback, totalCount] = await Promise.all([
+          getTodayPicksFromDB(),
+          getUserFeedbackMap(uid),
+          getTotalFeedbackCount(uid),
+        ])
+        setPickFeedback(allFeedback)
+        setTotalFeedback(totalCount)
+
         if (dbPicks && dbPicks.length > 0) {
-          setPicks(dbPicks)
+          // Sort: unreviewed first, reviewed to bottom
+          const sorted = [...dbPicks].sort((a, b) => {
+            const aReviewed = !!allFeedback[a.pickId]
+            const bReviewed = !!allFeedback[b.pickId]
+            if (aReviewed === bReviewed) return a.rank - b.rank
+            return aReviewed ? 1 : -1
+          })
+          setPicks(sorted)
           setSource('harmonic')
           setLoading(false)
           return
@@ -102,10 +120,37 @@ export default function DailyPicks() {
     await submitFeedback(userId, company, entry)
   }
 
+  const RECALIB_THRESHOLD = 100
+  const RECALIB_STEP      = 50
+
+  function shouldRecalibrate(count: number) {
+    if (count < RECALIB_THRESHOLD) return false
+    return (count - RECALIB_THRESHOLD) % RECALIB_STEP === 0
+  }
+
   async function handlePickFeedback(pick: PickCompany, label: PickFeedbackLabel) {
     if (!userId) return
+    const isNew = !pickFeedback[pick.pickId]
     setPickFeedback(prev => ({ ...prev, [pick.pickId]: label }))
     await submitPickFeedback(userId, pick, label)
+
+    if (isNew) {
+      const newCount = totalFeedback + 1
+      setTotalFeedback(newCount)
+
+      if (shouldRecalibrate(newCount)) {
+        try {
+          await fetch('/api/recalibrate-scores', {
+            method: 'POST',
+            headers: { 'x-cron-secret': import.meta.env.VITE_CRON_SECRET ?? '' },
+          })
+          setRecalibToast(true)
+          setTimeout(() => setRecalibToast(false), 5000)
+        } catch {
+          // Silent — recalibration is best-effort
+        }
+      }
+    }
   }
 
   async function handleRegen() {
@@ -126,8 +171,20 @@ export default function DailyPicks() {
   const isHarmonic    = source === 'harmonic'
   const displayCount  = isHarmonic ? (picks?.length ?? 0) : companies.length
 
+  const nextMilestone = totalFeedback < RECALIB_THRESHOLD
+    ? RECALIB_THRESHOLD
+    : RECALIB_THRESHOLD + Math.ceil((totalFeedback - RECALIB_THRESHOLD + 1) / RECALIB_STEP) * RECALIB_STEP
+  const progressPct = Math.min(100, Math.round((totalFeedback / nextMilestone) * 100))
+
   return (
     <div className="min-h-screen bg-terrain-bg text-terrain-text font-mono">
+      {/* Recalibration toast */}
+      {recalibToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-terrain-surface border border-terrain-goldBorder rounded-lg px-4 py-3 text-xs font-mono text-terrain-gold shadow-lg">
+          ✦ Scores updated based on your feedback
+        </div>
+      )}
+
       {/* Subtle grid */}
       <div
         className="fixed inset-0 pointer-events-none opacity-[0.02]"
@@ -167,6 +224,12 @@ export default function DailyPicks() {
               </button>
             )}
             <button
+              onClick={() => navigate('/review')}
+              className="text-xs font-mono border border-terrain-border text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder px-3 py-1.5 rounded transition-all duration-200"
+            >
+              Review Dashboard
+            </button>
+            <button
               onClick={() => navigate('/app')}
               className="text-xs font-mono border border-terrain-border text-terrain-muted hover:text-terrain-gold hover:border-terrain-goldBorder px-3 py-1.5 rounded transition-all duration-200"
             >
@@ -185,18 +248,37 @@ export default function DailyPicks() {
           <p className="text-terrain-muted text-xs font-mono">{today}</p>
 
           {!loading && displayCount > 0 && (
-            <div className="flex items-center gap-3 mt-2">
-              <p className="text-terrain-muted text-xs font-mono">
-                {displayCount} startups scouted to match Mucker Capital's thesis
-              </p>
-              {/* Source badge */}
-              <span className={`text-[9px] font-mono px-2 py-0.5 rounded border uppercase tracking-widest ${
-                isHarmonic
-                  ? 'border-terrain-goldBorder bg-terrain-goldDim text-terrain-gold'
-                  : 'border-terrain-border text-terrain-muted'
-              }`}>
-                {isHarmonic ? '⬡ Harmonic · Pre-scored' : '⬡ Claude · Web Search'}
-              </span>
+            <div className="flex flex-col gap-2 mt-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-terrain-muted text-xs font-mono">
+                  {displayCount} startups scouted to match Mucker Capital's thesis
+                </p>
+                {/* Source badge */}
+                <span className={`text-[9px] font-mono px-2 py-0.5 rounded border uppercase tracking-widest ${
+                  isHarmonic
+                    ? 'border-terrain-goldBorder bg-terrain-goldDim text-terrain-gold'
+                    : 'border-terrain-border text-terrain-muted'
+                }`}>
+                  {isHarmonic ? '⬡ Harmonic · Pre-scored' : '⬡ Claude · Web Search'}
+                </span>
+              </div>
+
+              {/* Recalibration progress bar */}
+              {isHarmonic && (
+                <div className="max-w-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] font-mono text-terrain-muted uppercase tracking-widest">
+                      {totalFeedback} / {nextMilestone} reviews → next recalibration
+                    </span>
+                  </div>
+                  <div className="h-1 bg-terrain-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-terrain-gold rounded-full transition-all duration-500"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -235,14 +317,24 @@ export default function DailyPicks() {
         {/* Harmonic pre-computed picks */}
         {!loading && !isRegen && isHarmonic && picks && picks.length > 0 && (
           <div className="flex flex-col gap-4">
-            {picks.map(pick => (
-              <PickCard
-                key={pick.pickId}
-                pick={pick}
-                feedback={pickFeedback[pick.pickId]}
-                onFeedback={label => handlePickFeedback(pick, label)}
-              />
-            ))}
+            {picks.map(pick => {
+              const isReviewed = !!pickFeedback[pick.pickId]
+              return (
+                <div key={pick.pickId} className={isReviewed ? 'opacity-60' : undefined}>
+                  {isReviewed && (
+                    <div className="flex items-center gap-1.5 mb-1.5 ml-1">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">✓ Reviewed</span>
+                    </div>
+                  )}
+                  <PickCard
+                    pick={pick}
+                    feedback={pickFeedback[pick.pickId]}
+                    userId={userId ?? undefined}
+                    onFeedback={label => handlePickFeedback(pick, label)}
+                  />
+                </div>
+              )
+            })}
           </div>
         )}
 

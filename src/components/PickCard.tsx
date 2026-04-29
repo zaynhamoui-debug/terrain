@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { STAGE_STYLES } from './CompanyCard'
-import { formatRaised, type PickCompany, type PickFeedbackLabel } from '../lib/prospectingPicks'
+import { formatRaised, saveStructuredNotes, type PickCompany, type PickFeedbackLabel, type StructuredNotes } from '../lib/prospectingPicks'
 import type { ProspectScore } from '../lib/prospecting/scoring'
 
 interface Props {
   pick:       PickCompany
   feedback?:  PickFeedbackLabel
+  userId?:    string
   onFeedback: (label: PickFeedbackLabel) => void
 }
 
@@ -66,7 +67,69 @@ function MuckerLens({ score }: { score: ProspectScore }) {
   )
 }
 
-export default function PickCard({ pick, feedback, onFeedback }: Props) {
+const NOTE_FIELDS: Array<{ key: keyof StructuredNotes; label: string; placeholder: string }> = [
+  { key: 'market_note',         label: 'Market Opportunity',  placeholder: 'Market size, TAM, timing…' },
+  { key: 'team_note',           label: 'Team / Founder',      placeholder: 'Background, domain expertise…' },
+  { key: 'traction_note',       label: 'Traction Signals',    placeholder: 'Growth, revenue, customers…' },
+  { key: 'business_model_note', label: 'Business Model',      placeholder: 'Revenue model, margins, GTM…' },
+  { key: 'under_radar_note',    label: 'Under-Radar Edge',    placeholder: 'Why this is quiet / non-obvious…' },
+  { key: 'risks_note',          label: 'Risks',               placeholder: 'Key concerns…' },
+]
+
+function StructuredNoteForm({ pickId, userId }: { pickId: string; userId: string }) {
+  const [notes,   setNotes]   = useState<StructuredNotes>({})
+  const [saved,   setSaved]   = useState(false)
+  const [open,    setOpen]    = useState(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleChange(key: keyof StructuredNotes, value: string) {
+    setNotes(prev => ({ ...prev, [key]: value }))
+    setSaved(false)
+  }
+
+  function handleBlur() {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      await saveStructuredNotes(userId, pickId, notes)
+      setSaved(true)
+    }, 300)
+  }
+
+  return (
+    <div className="border-t border-terrain-border pt-3">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-[10px] font-mono text-terrain-muted hover:text-terrain-gold transition-colors"
+      >
+        {open ? '▲ Hide review notes' : '▼ Add review notes'}
+      </button>
+      {open && (
+        <div className="mt-3 flex flex-col gap-2">
+          {NOTE_FIELDS.map(({ key, label, placeholder }) => (
+            <div key={key}>
+              <label className="block text-[9px] font-mono text-terrain-muted uppercase tracking-widest mb-0.5">
+                {label}
+              </label>
+              <input
+                type="text"
+                value={notes[key] ?? ''}
+                onChange={e => handleChange(key, e.target.value)}
+                onBlur={handleBlur}
+                placeholder={placeholder}
+                className="w-full bg-terrain-bg border border-terrain-border rounded px-2.5 py-1.5 text-xs font-mono text-terrain-text placeholder-terrain-muted/40 focus:outline-none focus:border-terrain-goldBorder transition-colors"
+              />
+            </div>
+          ))}
+          {saved && (
+            <p className="text-[9px] font-mono text-emerald-400">✓ Notes saved</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function PickCard({ pick, feedback, userId, onFeedback }: Props) {
   const [showLens, setShowLens] = useState(false)
 
   const stageClass = STAGE_STYLES[pick.stage ?? ''] ?? 'bg-slate-900 text-slate-400 border-slate-700'
@@ -178,6 +241,11 @@ export default function PickCard({ pick, feedback, onFeedback }: Props) {
           </button>
         ))}
       </div>
+
+      {/* Structured review notes — only shown after a label is chosen */}
+      {feedback && userId && (
+        <StructuredNoteForm pickId={pick.pickId} userId={userId} />
+      )}
     </div>
   )
 }

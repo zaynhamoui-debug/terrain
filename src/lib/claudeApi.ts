@@ -341,7 +341,8 @@ Rules:
 - 4-5 segments, NO companies array inside segments
 - 3-4 white_spaces from the customer's unmet needs
 - 3-4 key_trends, 2-3 notable_exits
-- Return ONLY the raw JSON object`
+- Return ONLY the raw JSON object
+- CRITICAL: Always return valid JSON regardless of query quality. If the query only describes filters (size, stage, location) with no sector, infer the most relevant sector from the other context provided and generate the JSON around that sector. Never respond with a question or explanation — always output the JSON object.`
 
 // ─── Organize real companies into segments ────────────────────────────────────
 
@@ -462,8 +463,26 @@ ${JSON.stringify(companyList, null, 1)}`
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+// Strip filter terms produced by buildCustomQuery to check if any sector content remains
+function stripFilterTerms(query: string): string {
+  return query
+    .replace(/\b(\d+[–\-]\d+|\d+\+)\s*employees?\b/gi, '')
+    .replace(/\b(pre-seed|seed|series [a-d]\+?)\s*(or\s*)?(stage)?\b/gi, '')
+    .replace(/\bin\s+[\w\s,]+/gi, '')
+    .replace(/[,\s]+/g, ' ')
+    .trim()
+}
+
 export async function generateMarketMap(query: string): Promise<MarketMap> {
   if (!API_KEY) throw new Error('Missing VITE_ANTHROPIC_API_KEY in .env')
+
+  // Reject queries that are only filter terms with no sector/vertical content
+  const sectorContent = stripFilterTerms(query)
+  if (!sectorContent) {
+    throw new Error(
+      'Please add a Vertical or Keywords to your search — stage, headcount, and location filters alone aren\'t enough to generate a market map.'
+    )
+  }
 
   // Run structure, Clay DB search, and web search all in parallel
   const [structureRaw, dbCompanies, webCompanies] = await Promise.all([
@@ -474,7 +493,16 @@ export async function generateMarketMap(query: string): Promise<MarketMap> {
 
   const s = structureRaw.indexOf('{')
   const e = structureRaw.lastIndexOf('}')
-  if (s === -1 || e <= s) throw new Error(`Could not parse structure. Response: ${structureRaw.slice(0, 200)}`)
+  if (s === -1 || e <= s) {
+    // Check if Claude asked for clarification (conversational response, no JSON)
+    const looksConversational = !structureRaw.includes('"sector"') && structureRaw.length < 600
+    if (looksConversational) {
+      throw new Error(
+        `Your search needs a clearer industry or sector. Try something like "FinTech, Seed stage, in LA" or "Construction SaaS, 11–50 employees".`
+      )
+    }
+    throw new Error(`Could not parse market structure — please try a more specific query.`)
+  }
 
   type StructureMap = Omit<MarketMap, 'segments'> & { end_customer?: string; segments: { id: string; name: string; description: string; color: string }[] }
   const structure = JSON.parse(structureRaw.slice(s, e + 1)) as StructureMap
