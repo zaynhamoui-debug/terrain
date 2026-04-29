@@ -1,4 +1,4 @@
-import type { ProspectCompany } from './types'
+import type { ProspectCompany } from './types.js'
 
 export class HarmonicClient {
   private readonly apiKey: string

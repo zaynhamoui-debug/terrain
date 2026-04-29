@@ -1,4 +1,4 @@
-import type { ProspectCompany, ProspectScore } from './types'
+import type { ProspectCompany, ProspectScore } from './types.js'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
 

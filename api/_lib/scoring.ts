@@ -1,4 +1,4 @@
-import type { ProspectCompany, ProspectScore, Recommendation } from './types'
+import type { ProspectCompany, ProspectScore, Recommendation } from './types.js'
 
 const HOT_GEOS        = ['san francisco', 'sf bay', 'bay area', 'palo alto', 'menlo park', 'seattle', 'new york']
 const HYPE_VERTICALS  = ['ai agent', 'foundation model', 'crypto', 'web3', 'defense', 'space', 'robotics']
